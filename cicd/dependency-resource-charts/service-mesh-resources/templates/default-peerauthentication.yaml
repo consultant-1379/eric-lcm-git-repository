@@ -1,0 +1,11 @@
+apiVersion: "security.istio.io/v1beta1"
+kind: "PeerAuthentication"
+metadata:
+  name: default-peer-authentication-policy
+spec:
+  mtls:
+{{- if .Values.global.security.tls.enabled }}
+    mode: STRICT
+{{- else }}
+    mode: DISABLE
+{{- end }}

@@ -1,0 +1,296 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+modelVersion: 2.0
+
+description: "Install Rules"
+
+# See image catalog: https://confluence.lmera.ericsson.se/display/ACD/ADP+CICD+Docker+Image+Catalog
+docker-images:
+    - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:${env.RELEASE_AUTO_TAG}
+    - adp-helm-kubectl: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-py3kubehelmbuilder:${env.HELM_KUBECTL_TAG}
+    - robot-framework: armdocker.rnd.ericsson.se/proj-mlops-ci-internal/tools/robot-test-runner:latest
+    - ci-toolkit: armdocker.rnd.ericsson.se/proj-mlops-ci-internal/tools/ci-toolkit:${env.CI_TOOLKIT_TAG}
+
+import:
+    common-properties: ../common-properties.yaml
+    helm: helm-rules.yaml
+    
+
+properties:
+    - image-secret: ${env.ARM_DOCKER_CREDS}   
+    - docker-flags-helm3: "--env XDG_DATA_HOME=${env.PWD}/.bob/helm/data --env XDG_CACHE_HOME=${env.PWD}/.bob/helm/cache --env XDG_CONFIG_HOME=${env.PWD}/.bob/helm/config --env HELM_VERSION=${env.HELM_VERSION}"
+    - kubectl-cache-dir: "${env.PWD}/.bob/kubectl/cache"
+    - helm-values-file: "${common-properties.helm-values-file}"
+    - helm-values-template: "${env.PWD}/cicd/values/eric-lcm-git-repository-values.tmpl"
+    - helm-params: |
+        IMAGE_PULL_SECRET=${image-secret}
+        TLS_ENABLED=${env.TLS_ENABLED}
+        INGRESS_ENABLED=${env.INGRESS_ENABLED}
+        SERVICE_MESH_ENABLED=${env.SERVICE_MESH_ENABLED}
+        NETWORK_POLICY_ENABLED=${env.NETWORK_POLICY_ENABLED}
+        INIT_CONFIG_ENABLED=${env.INIT_CONFIG_ENABLED}
+        GIT_REPOSITORY_HOST_NAME=${env.GIT_REPOSITORY_HOST_NAME}
+        GIT_REPOSITORY_HOST_TLS_SECRET_NAME=${env.GIT_REPOSITORY_HOST_TLS_SECRET_NAME}
+
+
+env:
+    - DOCKER_NETWORK (default=--network host)
+    - HOME
+    - PWD
+    - KUBECONFIG (default=${env.HOME}/.kube/config)
+
+    # Default docker image tags
+    - RELEASE_AUTO_TAG (default=latest)
+    - HELM_KUBECTL_TAG (default=latest)
+    - CI_TOOLKIT_TAG (default=latest)
+    - KUBECTL_VERSION (default=1.25.3)
+
+    # Credentials
+    - DOCKER_CONFIG_DIR (default=${env.HOME}/.docker)
+    - DOCKER_CONFIG (default=$DOCKER_CONFIG_DIR/config.json)
+    - CREDENTIALS_SELI_ARTIFACTORY_USR
+    - CREDENTIALS_SELI_ARTIFACTORY_PSW
+    - SELI_ARTIFACTORY_REPO_USER (default=${env.CREDENTIALS_SELI_ARTIFACTORY_USR})
+    - SELI_ARTIFACTORY_REPO_PASS (default=${env.CREDENTIALS_SELI_ARTIFACTORY_PSW})
+    - SELI_ARTIFACTORY_REPO_API_KEY
+    - SERO_ARTIFACTORY_REPO_API_KEY
+
+    # Kubernetes
+    - ENABLE_HELM_V3 (default=true)
+    - HELM_VERSION (default=${common-properties.helm-version})
+    - K8S_NAMESPACE (default=git-repository-ci)
+    - KUBECONFIG (default=${env.HOME}/.kube/config)
+    - HELM_INSTALL_TIMEOUT (default=5m0s)
+    - HELM_RELEASE (default=${common-properties.helm-chart-name}-release)
+    - HELM_TEST_TIMEOUT (default=5m0s)
+    - COLLECT_LOGS_SCRIPT_LOCATION (default="https://arm.sero.gic.ericsson.se/artifactory/proj-ADP_GS_Support_FTP-generic-local/collect_ADP_logs")
+    - COLLECT_LOGS_SCRIPT_FILE_NAME (default="collect_ADP_logs.sh")
+    - COLLECT_LOGS_SINCE_RELATIVE_TIME (default="2h")
+    - COLLECT_LOGS_DIR (default=./k8s-logs)
+    - BUILD_DIR (default=./build)
+    - KAAS_INFO_FILE (default=${env.BUILD_DIR}/kaas-info.log)
+    - NETWORK_POLICY_ENABLED (default=false)
+    - ARM_DOCKER_CREDS (default=armdocker-creds)
+
+    # Robot
+    - ROBOT_REPORTS_DIR (default=${env.PWD}/test-reports)
+    - ROBOT_TESTS_DIR (default=${env.PWD}/test)
+    - TEST_DATA_DIR (default=${env.PWD}/test/testdata)
+
+    # Enable/Disable Optionals
+    - INIT_CONFIG_ENABLED(default=true)
+    - NETWORK_POLICY_ENABLED(default=false)
+    - INGRESS_ENABLED(default=true)
+    - TLS_ENABLED(default=false)
+    - SERVICE_MESH_ENABLED(default=true)
+    - GIT_REPOSITORY_HOST_NAME
+
+    ## Service Variable
+    - VERSION(default=)
+
+    ## Log Collection
+    - COLLECT_LOGS_DIR (default=${env.BUILD_DIR}/k8s-logs)
+    - COLLECT_LOGS_SCRIPT_LOCATION (default="https://arm.sero.gic.ericsson.se/artifactory/proj-ADP_GS_Support_FTP-generic-local/collect_ADP_logs")
+    - COLLECT_LOGS_SCRIPT_FILE_NAME (default="collect_ADP_logs.sh")
+    - COLLECT_LOGS_SINCE_RELATIVE_TIME (default="2h")
+
+    ## TLS Variables
+    - GIT_REPOSITORY_HOST_NAME(default="")
+    - GIT_REPOSITORY_HOST_TLS_SECRET_NAME(default="eric-lcm-git-repository-tls")
+    - GIT_REPOSITORY_TLS_SECRET_MANIFEST
+
+var:
+    - kaas-version
+    - kaas-current-context
+    - helm-chart-repopath
+    - robot-include-tag
+    - robot-exclude-tag
+    - robot-test-suite-to-run
+    - robot-test-report-dir
+    - robot-executable
+    - sm-version    
+    - chart-source-directory
+    - chart-name
+
+rules:
+    clean:
+        - task: rm
+          cmd:
+            - rm -rf k8s-logs/
+            - rm -f helm-install-dry-run.log
+
+    conditions: 
+    - task: tls-enabled 
+      cmd: test ${env.TLS_ENABLED} == true
+    - task: gas-enabled 
+      cmd: test ${env.GAS_ENABLED} == true
+
+    prepapre-values-file:
+      - task: init
+        cmd:
+          - echo "${helm-params}" >  ${env.PWD}/.bob/var.dynamic-properties 
+          - cp "${helm-values-template}" "${helm-values-file}"
+      - task: update-values-file
+        cmd: bash -c '
+                set -ex;
+                while read -r propKeyValue; do
+                  if [[ $propKeyValue == *"="* ]]; then
+                    key=$(echo $propKeyValue | cut -d= -f1);
+                    value=$(echo $propKeyValue | cut -d= -f2);
+                    sed -i "s|$key|$value|g" ${helm-values-file};
+                  fi;
+                done <<< "$(cat ${env.PWD}/.bob/var.dynamic-properties)";'
+
+    helm-install-prep:
+        - task: create-namespace
+          docker-image: adp-helm-kubectl
+          docker-flags: &docker_flags_kube_config_test 
+              - "${docker-flags-helm3}"
+              - ${env.DOCKER_NETWORK}
+              - "--env HOME=${env.HOME}"
+              - "--env K8S_NAMESPACE=${env.K8S_NAMESPACE}"
+              - "--env KUBECONFIG=${env.KUBECONFIG}"
+              - "--env ENABLE_HELM_V3"
+              - "--env HELM_VERSION"
+              - "--env KUBECTL_VERSION"
+              - "--env SELI_ARTIFACTORY_REPO_USER=${env.SELI_ARTIFACTORY_REPO_USER}"
+              - "--env SELI_ARTIFACTORY_REPO_PASS=${env.SELI_ARTIFACTORY_REPO_PASS}"
+              - "--env COLLECT_LOGS_SCRIPT_LOCATION"
+              - "--volume ${env.PWD}:${env.PWD}"
+              - "--volume ${env.HOME}:${env.HOME}"
+              - "--volume ${env.KUBECONFIG}:${env.KUBECONFIG}"
+              - "--volume ${env.DOCKER_CONFIG_DIR}:${env.DOCKER_CONFIG_DIR}"
+          cmd: /bin/bash -c 'kubectl create namespace ${env.K8S_NAMESPACE} --dry-run=client --output=yaml | kubectl apply -f -'
+
+        - task: armdocker-cred-create
+          docker-image: ci-toolkit
+          docker-flags:  *docker_flags_kube_config_test
+          cmd: kubectl create secret docker-registry ${env.ARM_DOCKER_CREDS}
+                --docker-server=armdocker.rnd.ericsson.se
+                --docker-username=${env.SELI_ARTIFACTORY_REPO_USER}
+                --docker-password=${env.SELI_ARTIFACTORY_REPO_API_KEY}
+                --docker-email=mxecifunc@ericsson.com
+                --namespace=${env.K8S_NAMESPACE}
+        
+        - task: ingress-tls-secret-create
+          docker-image: ci-toolkit
+          condition: conditions:tls-enabled
+          docker-flags: *docker_flags_kube_config_test
+          cmd: kubectl -n ${env.K8S_NAMESPACE} apply -f ${env.GIT_REPOSITORY_TLS_SECRET_MANIFEST}
+      
+    helm-install-dry-run:
+        - task: install-dry-run
+          docker-image: adp-helm-kubectl
+          docker-flags: *docker_flags_kube_config_test
+          cmd: helm install ${var.chart-source-directory}
+              --namespace $K8S_NAMESPACE
+              --dry-run
+              --debug
+              --generate-name > helm-install-dry-run.log
+
+    helm-prepare-repo-drop:
+        - task: prepare-repo
+          cmd:
+              - echo ${common-properties.helm-chart-drop-repopath} > .bob/var.helm-chart-repopath
+    
+    helm-prepare-repo-released:
+        - task: prepare-repo
+          cmd:
+              - echo ${common-properties.helm-chart-released-repopath} > .bob/var.helm-chart-repopath              
+
+    helm-install-or-upgrade-from-local:
+        - task: install-or-upgrade-from-local
+          docker-image: adp-helm-kubectl
+          docker-flags: *docker_flags_kube_config_test
+          cmd: helm upgrade
+              --install ${env.HELM_RELEASE} ${helm.chart-file}
+              --namespace ${env.K8S_NAMESPACE}
+              --values ${helm-values-file}
+              --timeout ${env.HELM_INSTALL_TIMEOUT}
+              --debug
+              --wait
+
+    helm-install-or-upgrade-from-arm:
+        - task: install-or-upgrade-from-arm
+          docker-image: adp-helm-kubectl
+          docker-flags: *docker_flags_kube_config_test
+          cmd: helm upgrade
+              ${env.VERSION}
+              --install ${env.HELM_RELEASE} ${var.chart-name}
+              --namespace ${env.K8S_NAMESPACE}
+              --values ${helm-values-file}
+              --debug
+              --timeout ${env.HELM_INSTALL_TIMEOUT}
+              --wait
+              --devel
+              --repo ${var.helm-chart-repopath} 
+              --username ${env.SELI_ARTIFACTORY_REPO_USER} 
+              --password ${env.SELI_ARTIFACTORY_REPO_PASS}
+    
+    install-precodereview:
+      - rule: prepapre-values-file
+      - rule: helm-install-or-upgrade-from-local
+      - rule: helm-healthcheck
+    
+    install-drop:
+      - rule: helm-prepare-repo-drop
+      - rule: prepapre-values-file
+      - rule: helm-install-or-upgrade-from-arm
+      - rule: helm-healthcheck
+
+    helm-uninstall:
+      - task: cleanup-release
+        docker-image: adp-helm-kubectl
+        docker-flags: *docker_flags_kube_config_test
+        cmd: helm uninstall ${env.HELM_RELEASE} --namespace ${env.K8S_NAMESPACE} || true 
+        
+    helm-healthcheck:
+        - task: healthcheck
+          docker-image: adp-helm-kubectl
+          docker-flags: *docker_flags_kube_config_test
+          cmd: ${env.PWD}/cicd/scripts/healthcheck.sh
+          
+    collect-k8s-logs:
+      - task: collect-logs-using-script
+        docker-image: adp-helm-kubectl
+        docker-flags:
+            - ${env.DOCKER_NETWORK}
+            - "--env ENABLE_HELM_V3"
+            - "--env HOME=${env.HOME}"
+            - "--env K8S_NAMESPACE=${env.K8S_NAMESPACE}"
+            - "--env KUBECONFIG=${env.KUBECONFIG}"
+            - "--env KUBECTL_VERSION"
+            - "--env HELM_VERSION"
+            - "--env SELI_ARTIFACTORY_REPO_USER=${env.SELI_ARTIFACTORY_REPO_USER}"
+            - "--env SELI_ARTIFACTORY_REPO_PASS=${env.SELI_ARTIFACTORY_REPO_PASS}"
+            - "--env COLLECT_LOGS_SCRIPT_LOCATION"
+            - "--env COLLECT_LOGS_SCRIPT_FILE_NAME"
+            - "--env COLLECT_LOGS_SINCE_RELATIVE_TIME"
+            - "--env COLLECT_LOGS_DIR"
+            - "--env HOME=${env.HOME}"
+            - "--volume ${env.HOME}:${env.HOME}"
+            - "--volume ${env.KUBECONFIG}:${env.KUBECONFIG}"
+        cmd:
+            - mkdir -p ${env.COLLECT_LOGS_DIR}
+            - kubectl config view > ${env.COLLECT_LOGS_DIR}/kubectl.config
+            - kubectl get ns > ${env.COLLECT_LOGS_DIR}/kubectl-get-ns.log
+            - helm ls -Aa > ${env.COLLECT_LOGS_DIR}/helm-ls-Aa.log
+            - printenv | grep -v CREDENTIALS | grep -v ARTIFACTORY > ${env.COLLECT_LOGS_DIR}/printenv.log
+            - curl -u ${env.SELI_ARTIFACTORY_REPO_USER}:${env.SELI_ARTIFACTORY_REPO_PASS} ${env.COLLECT_LOGS_SCRIPT_LOCATION}/${env.COLLECT_LOGS_SCRIPT_FILE_NAME} > ${env.COLLECT_LOGS_DIR}/${env.COLLECT_LOGS_SCRIPT_FILE_NAME}
+            - chmod 777 ${env.COLLECT_LOGS_DIR}/${env.COLLECT_LOGS_SCRIPT_FILE_NAME}
+            - sh -c "cd ${env.COLLECT_LOGS_DIR} && ./${env.COLLECT_LOGS_SCRIPT_FILE_NAME} ${env.K8S_NAMESPACE} ${env.COLLECT_LOGS_SINCE_RELATIVE_TIME}"
+

@@ -1,0 +1,50 @@
+#
+# COPYRIGHT Ericsson 2023
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+{{ $serviceMeshEnabled := include "eric-lcm-git-repository.serviceMesh.enabled" .}}
+{{- $global := fromYaml (include "eric-lcm-git-repository.global" .) }}
+
+{{- if eq $serviceMeshEnabled "true" -}}
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}-destinationrule-kvdbrd
+  labels:
+    {{- include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations:
+    {{- include "eric-lcm-git-repository.annotations" . | nindent 4 }}
+spec:
+  host: {{ .Values.serviceMesh.egress.keyvaluedatabaserd.serviceName }}
+  exportTo:
+  - "."
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+  {{- if $global.security.tls.enabled }}
+    portLevelSettings:
+    - port:
+        number: {{ .Values.gitea.config.redis.tlsPort }}
+      tls:
+        mode: {{ .Values.serviceMesh.egress.keyvaluedatabaserd.tlsMode }}
+        clientCertificate: {{ include "eric-lcm-git-repository.egress-redis-client-cert" . }}
+        privateKey: {{ include "eric-lcm-git-repository.egress-redis-private-key" . }}
+        caCertificates: {{ include "eric-lcm-git-repository.egress-ca-cert" . }}
+  {{- end }}
+  workloadSelector:
+    matchLabels:
+      {{- include "eric-lcm-git-repository.labels" . | nindent 6 }}
+{{- end -}}

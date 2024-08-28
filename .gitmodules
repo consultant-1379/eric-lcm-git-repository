@@ -1,0 +1,6 @@
+[submodule "bob"]
+	path = bob
+	url = ../../adp-cicd/bob
+[submodule "mlops-utils"]
+	path = mlops-utils
+	url = ../mlops-utils

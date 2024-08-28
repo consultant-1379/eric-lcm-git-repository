@@ -1,0 +1,164 @@
+modelVersion: 2.0
+
+
+description: Git Repository Microservice
+
+
+docker-images:
+    - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:${env.RELEASE_AUTO_TAG}
+    - ci-toolkit: armdocker.rnd.ericsson.se/proj-mxe-ci-internal/ci-toolkit:${env.CI_TOOLKIT_TAG}
+
+
+import:
+    common-properties: cicd/common-properties.yaml
+    image-build: cicd/3pp-build-rulesets/build.yaml
+    3pp: cicd/3pp-build-rulesets/3pp.yaml
+    common: cicd/bob-rulesets/common-rules.yaml
+    helm: cicd/bob-rulesets/helm-rules.yaml
+    munin: cicd/bob-rulesets/munin-rules.yaml
+    dependencies: cicd/bob-rulesets/dependencies-install.yaml
+    service-install: cicd/bob-rulesets/service-install.yaml
+    evms: cicd/bob-rulesets/evms-rules.yaml
+    mimer: cicd/3pp-build-rulesets/mimer.yaml
+    docs: cicd/bob-rulesets/doc-rules.yaml
+    infra: mlops-utils/rulesets/common/common-ruleset.yaml
+
+properties:
+    - helm-chart-name: ${common-properties.helm-chart-name}
+    - helm-chart: "${var.chart-output-directory}/${var.chart-name}-${var.chart-version}.tgz"
+    - values-adp-dr-checker: helm/eric-lcm-git-repository/profiles/dr-check-values.yaml
+
+env:
+    - K8S_NAMESPACE (default=eric-lcm-git-repository-ci)
+    - HELM_RELEASE (default=api)
+    - FOSSA_BRANCH (default=master)
+    - GERRIT_USERNAME (default=)
+    - GERRIT_PASSWORD (default=)
+    - UPDATE_CBO_VERSION (default=)
+    - HOME
+    - RELEASE_AUTO_TAG (default=latest)
+    - CI_TOOLKIT_TAG (default=latest)
+    - SERO_ARM_TOKEN
+
+    # Credentials
+    - DOCKER_CONFIG_DIR (default=${env.HOME}/.docker)
+    - DOCKER_CONFIG (default=$DOCKER_CONFIG_DIR/config.json)
+    - CREDENTIALS_SELI_ARTIFACTORY_USR
+    - CREDENTIALS_SELI_ARTIFACTORY_PSW
+    - SELI_ARTIFACTORY_REPO_USER (default=${env.CREDENTIALS_SELI_ARTIFACTORY_USR})
+    - SELI_ARTIFACTORY_REPO_PASS (default=${env.CREDENTIALS_SELI_ARTIFACTORY_PSW})
+    - SELI_ARTIFACTORY_REPO_API_KEY
+    - SERO_ARTIFACTORY_REPO_API_KEY
+
+
+var:
+    - chart-name
+    - chart-output-directory
+    - chart-version
+    - helm-chart
+    - image-repopath-internal
+    - version
+
+
+rules:
+
+  clean:
+    - rule: common.clean
+
+  init:
+    - rule: common.init
+    - rule: helm.init
+      properties:
+        - chart-name: ${helm-chart-name}
+        - chart-app-version: "${common.version}"
+        - chart-version: ${var.common.version}
+        - chart-output-directory: ${common.ci-build-directory}/helm
+
+  init-precodereview:
+    - rule: init
+    
+  init-drop:
+    - rule: init
+    - rule: common.init-drop
+
+  build-image:
+    - rule: image-build.init
+    - rule: image-build.build-images
+
+  chart-build:
+    - rule: helm.package
+      properties:
+        - helm-extra-flags:
+            --replace eric-product-info.yaml:VERSION=${var.version}
+            --replace eric-product-info.yaml:REPO_PATH=${var.image-repopath-internal}
+            --replace eric-product-info.yaml:IMAGE_NAME=${common-properties.docker-image-name}
+
+  chart-lint:
+    - rule : helm.lint
+      properties :
+        - chart-name : ${common-properties.helm-chart-name}
+        - helm-extra-flags : --values ${values-adp-dr-checker}
+
+  lint-test:
+    - rule: chart-lint
+    - rule: image-build.lint-2pp-versions
+
+  quality-test:
+    - rule: chart-dr
+
+  helm-push-internal:
+    - rule: helm.push
+      properties:
+          - helm-repo-path: ${common-properties.helm-chart-ci-repopath}
+
+  helm-push-drop:
+    - rule: helm.push
+      properties:
+          - helm-repo-path: ${common-properties.helm-chart-drop-repopath}
+
+  push-image:
+    - rule: image-build.image-push
+
+  delete-images:
+        - rule: image-build.delete-images
+
+  chart-dr:
+    - rule: helm.design-rule
+      properties:
+        - helm-extra-flags: --values-file ${values-adp-dr-checker}
+          #properties:
+          # - helm-design-rules-skip:
+          #   -DhelmDesignRule.config.drHc101=skip
+  update-files:
+    - rule: image-build.update-files
+  create-change:
+    - rule: image-build.create-change
+
+  helm-install-precodereview:
+    - rule: common.clean-k8s-cluster
+    - rule: service-install.helm-install-prep
+    - rule: dependencies.install
+    - rule: service-install.install-precodereview
+
+  helm-install-drop:
+    - rule: common.clean-k8s-cluster
+    - rule: service-install.helm-install-prep
+    - rule: dependencies.install
+    - rule: service-install.install-drop
+  
+  helm-uninstall:
+    - rule: service-install.helm-uninstall
+    - rule: dependencies.uninstall
+    - rule: common.clean-k8s-cluster
+
+  evms-pre-registration:
+    - rule: evms.evms-pre-registration
+  
+  mimer-pre-registration:
+    - rule: mimer.create-versions
+  
+  docs-marketplace-generate:
+    - rule: docs.build
+
+  collect-k8s-logs:
+    - rule: service-install.collect-k8s-logs

@@ -1,0 +1,54 @@
+{{- $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}
+  labels: {{ include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations: {{ include "eric-lcm-git-repository.annotations" . | nindent 4 }}
+spec:
+  {{/*  {{- if not .Values.autoScaling.enabled }} 
+  # replicas: {{ .Values.replicaCount }} */}}
+  replicas: 1
+   {{/*  # {{- end }} */}}
+
+  strategy:
+    type: {{ .Values.updateStrategy.type | quote }}
+    {{- if and (eq .Values.updateStrategy.type "RollingUpdate") (or ((.Values.updateStrategy.rollingUpdate).maxUnavailable) ((.Values.updateStrategy.rollingUpdate).maxSurge)) }}
+    rollingUpdate:
+    {{- if (((.Values).updateStrategy).rollingUpdate).maxUnavailable }}
+      maxUnavailable: {{ .Values.updateStrategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+    {{- if (((.Values).updateStrategy).rollingUpdate).maxSurge }}
+      maxSurge: {{ .Values.updateStrategy.rollingUpdate.maxSurge }}
+    {{- end }}
+    {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "eric-lcm-git-repository.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  template:
+    metadata:
+      labels: {{ include "eric-lcm-git-repository.podLabels" . | nindent 8 }}
+      annotations: {{ include "eric-lcm-git-repository.podAnnotations" . | nindent 8 }}
+    spec:
+      {{- include "eric-lcm-git-repository.pullSecret" . | nindent 6 }}
+      serviceAccountName: {{ include "eric-lcm-git-repository.serviceAccountName" . }}
+      securityContext:
+        fsGroup: {{ include "eric-lcm-git-repository.fsGroup.coordinated" . }}
+      automountServiceAccountToken: false
+      initContainers:
+        {{- include "eric-lcm-git-repository.initContainerSpec" . | nindent 8 }}
+        {{- include "eric-lcm-git-repository.initAppIniContainerSpec" . | nindent 8 }}
+        {{- include "eric-lcm-git-repository.configureGiteaContainerSpec" . | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- include "eric-lcm-git-repository.podPriorityClass" . | nindent 6 }}
+      containers:
+        {{- include "eric-lcm-git-repository.containerSpec" . | nindent 8 }}
+      volumes:
+        {{- include "eric-lcm-git-repository.volumes" . | nindent 8 }}
+      nodeSelector: {{ include  "eric-lcm-git-repository.nodeSelector" . | nindent 8 }}
+{{ if or ($global.tolerations) (.Values.tolerations) }}
+      tolerations: {{ include "eric-lcm-git-repository.merge-tolerations" . | nindent 8 }}
+{{ end }}
+      topologySpreadConstraints: {{ toYaml .Values.topologySpreadConstraints | nindent 8 }}
+      {{- include "eric-lcm-git-repository.affinityPodAntiAffinity" . | indent 6 }}

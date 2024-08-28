@@ -1,0 +1,55 @@
+{{- if .Values.ingress.createRoutes -}}
+{{- $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+{{- $serviceMeshEnabled := include "eric-lcm-git-repository.serviceMesh.enabled" .}}
+
+# Route to Servicemesh gateway if SM is enabled, and handle routing to service via VirtualService else route directly to service
+{{- $name := include "eric-lcm-git-repository.name" . -}}
+{{- $svcPort := .Values.service.http.port -}}
+{{- $serviceMeshEnabled := include "eric-lcm-git-repository.serviceMesh.enabled" .}}
+{{- if eq $serviceMeshEnabled "true" -}}
+  {{- $name = .Values.serviceMesh.gateway.serviceName -}}
+ {{- $name = .Values.serviceMesh.gateway.serviceName -}}
+  {{- if $global.security.tls.enabled }}
+    {{- $svcPort = .Values.serviceMesh.gateway.httpsPort -}}
+  {{- else }}
+    {{- $svcPort = .Values.serviceMesh.gateway.httpPort -}}
+  {{- end }}
+{{- end }}
+
+
+
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}-routes
+  labels: {{ include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations: {{- include "eric-lcm-git-repository.iccrHttpProxyAnnotations" . | nindent 4 }}
+spec:
+  {{- if .Values.ingress.ingressClass }}
+  ingressClassName: {{ .Values.ingress.ingressClass }}
+  {{- end }}
+  routes:
+    - conditions:
+        - prefix: {{ .Values.gitea.relativeURL }}
+      services:
+        - name: {{ $name }}
+          port: {{ $svcPort }}
+          {{- if $global.security.tls.enabled }}
+          protocol: "tls"
+          validation:
+            caSecret: {{ .Values.ingress.tls.client.rootCaSecret }}
+            subjectName: {{ .Values.ingress.tls.client.subjectName }}
+          {{- end }}
+      {{ if ne $serviceMeshEnabled "true" -}}
+      {{ if ne .Values.gitea.relativeURL "/" -}}
+      # Handle pathRewritePolicy only if baseHref is not / and servicemesh is not enabled
+      # if service mesh is enabled, rewrite is done in VirtualService
+      pathRewritePolicy:
+        replacePrefix:
+          - prefix: {{ .Values.gitea.relativeURL }}
+            replacement: /
+        {{ end -}}
+        {{- end }}
+{{- else if .Values.ingress.enabled -}}
+{{- fail "ingress.createRoutes must be true when ingress is enabled" }}
+{{- end -}}

@@ -1,0 +1,106 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+modelVersion: 2.0
+description: "Gitea Dependency Install/Uninstall"
+
+# See image catalog: https://eteamspace.internal.ericsson.com/pages/viewpage.action?spaceKey=ACD&title=ADP+CICD+Docker+Image+Catalog
+docker-images:
+    - ci-toolkit: armdocker.rnd.ericsson.se/proj-mlops-ci-internal/tools/ci-toolkit-py:${env.CI_TOOLKIT_TAG}
+
+
+# import environment variables (For example: Jenkins parameters)
+env:
+    - PWD
+    - HOME
+    - BOB_DIR (default=${env.PWD}/.bob)
+    - CI_TOOLKIT_TAG (default=latest)
+    - DOCKER_NETWORK (default=--network host)
+    - K8S_NAMESPACE (default=eric-lcm-git-repository-ci)
+    - KUBECONFIG (default=${env.HOME}/.kube/config)
+    - ARM_DOCKER_CREDS (default=armdocker-creds)
+    - CREDENTIALS_SELI_ARTIFACTORY_PSW
+    - CREDENTIALS_SELI_ARTIFACTORY_USR
+    - SELI_ARTIFACTORY_REPO_USER (default=${env.CREDENTIALS_SELI_ARTIFACTORY_USR})
+    - SELI_ARTIFACTORY_REPO_PASS (default=${env.CREDENTIALS_SELI_ARTIFACTORY_PSW})
+    - SELI_ARTIFACTORY_REPO_API_KEY
+    - SERO_ARTIFACTORY_REPO_API_KEY
+    - INGRESS_CLASS (default=eric-tm-ingress-controller-cr)
+    - EGADROOTCA_LOCATION (default=/usr/local/share/ca-certificates/EGADRootCA.crt)
+
+    - LOGSHIPPER_ENABLED(default=false)
+    - PG_OPERATOR_ENABLED(default=true)
+    - TLS_ENABLED(default=false)
+    - STORAGE_CLASS(default='rbd')
+    - ENABLE_AUTO_MTLS (default=true)
+    - SERVICE_MESH_ENABLED (default=true)
+var:
+    - sm-version
+
+# Rules to execute
+rules:
+    conditions:
+        - task: tls-enabled
+          cmd: test ${env.TLS_ENABLED} == true
+
+    install:
+        - task: dependencies-install
+          docker-image: ci-toolkit
+          docker-flags: &docker_flags
+              - ${env.DOCKER_NETWORK}
+              - "--env HOME"
+              - "--env PWD"
+              - "--env BOB_DIR"
+              - "--env K8S_NAMESPACE"
+              - "--env KUBECONFIG"
+              - "--env TLS_ENABLED"
+              - "--env STORAGE_CLASS"
+              - "--env SERVICE_MESH_ENABLED"
+              - "--env ENABLE_AUTO_MTLS"
+              - "--env PM_SERVER_ENABLED"
+              - "--env LOGSHIPPER_ENABLED"
+              - "--env GAS_ENABLED"
+              - "--env PG_OPERATOR_ENABLED"
+              - "--env IAM_ENABLED"
+              - "--env BRO_ENABLED"
+              - "--env NETWORK_POLICY_ENABLED"
+              - "--env ARM_DOCKER_CREDS"
+              - "--env SELI_ARTIFACTORY_REPO_API_KEY"
+              - "--env SELI_ARTIFACTORY_REPO_USER"
+              - "--env SERO_ARTIFACTORY_REPO_API_KEY"
+              - "--env EGADROOTCA_LOCATION"
+              - "--env INGRESS_CLASS"
+              - "--volume ${env.PWD}:${env.PWD}"
+              - "--volume ${env.HOME}:${env.HOME}"
+          cmd: helmfile --debug sync -f cicd/helmfile/helmfile.yaml  | tee build/dependencies_install.log
+        # - task: get-sm-version
+        #   docker-image: ci-toolkit
+        #   condition: conditions:tls-enabled
+        #   docker-flags: *docker_flags
+        #   cmd: bash ./ci/scripts/get-sm-version.sh ${env.BOB_DIR}/var.sm-version
+    upgrade:
+        - task: dependencies-upgrade
+          docker-image: ci-toolkit
+          docker-flags: *docker_flags
+          cmd: helmfile --debug apply -f cicd/helmfile/helmfile.yaml  | tee build/dependencies_upgrade.log
+    uninstall:
+        - task: dependencies-delete
+          docker-image:  ci-toolkit
+          docker-flags: *docker_flags
+          cmd: helmfile destroy -f cicd/helmfile/helmfile.yaml --debug || true
+        - task: armdocker-cred-delete
+          docker-image: ci-toolkit
+          docker-flags:  *docker_flags
+          cmd: kubectl delete secret ${env.ARM_DOCKER_CREDS} --namespace=${env.K8S_NAMESPACE} ||true

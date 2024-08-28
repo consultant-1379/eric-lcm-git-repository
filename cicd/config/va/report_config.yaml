@@ -1,0 +1,29 @@
+model_version: 2.1
+product_va_config:
+  name: Git Repository
+  product_name: Git Repository
+  product_number: APR 201 0000
+  version: {version}
+  va_template_version: 2.0.0
+  description: >-
+    Git Repository Microservice
+  spoc: "**TODO**"
+  images:
+      - eric-lcm-git-repository:{version}
+  # List of issue trackers used for citing Trouble Reports at the migitations
+  # (see below).
+  issue_trackers:
+  # The `default` key is looked up if no hint provided on what tracker
+  # should be used.  This is not added automatically, one has to provide
+  # this explicitly.
+    default: "https://eteamproject.internal.ericsson.com/browse/"
+  mitigations:
+    open_ports:
+      "8443/tcp":
+        # Change this to `true` if intended.
+        intended: true
+        # For intended ports, the `description` and `mitigation` keys and their values could be removed,
+        # otherwise:
+        # - describe why the port is open
+        description: >-
+          Intended, this is the port for the microservice REST API interface

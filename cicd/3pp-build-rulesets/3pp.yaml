@@ -1,0 +1,261 @@
+#
+# COPYRIGHT Ericsson 2022
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+modelVersion: 2.0
+
+# See image catalog: https://confluence.lmera.ericsson.se/display/ACD/ADP+CICD+Docker+Image+Catalog
+docker-images:
+    - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:${env.RELEASE_AUTO_TAG}
+    - adp-maven-builder: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-java11mvnbuilder:${env.MVN_BUILDER_TAG}
+    - adp-go-builder: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-gobuilder.adp-base-os:latest
+    - ci-toolkit: armdocker.rnd.ericsson.se/proj-mxe-ci-internal/ci-toolkit:${env.CI_TOOLKIT_TAG}
+
+import:
+    common: ../common-properties.yaml
+    build: build.yaml
+
+properties:
+    # FOSSA
+    - fossa-server-endpoint: https://scasfossa.internal.ericsson.com/
+    - fossa-project-name-prefix: eric-lcm-git-repository
+    - fossa-dir: ${env.PWD}/cicd/config/fossa
+    - license-dir: ${env.PWD}/cicd/config/license
+    
+    - fossa-gitea-project-name: ${fossa-project-name-prefix}-gitea
+    - fossa-gitea-report-name: ${fossa-dir}/fossa-gitea-report.json
+    - fossa-gitea-src-path: ${env.PWD}/.bob/3pps/gitea
+    - fossa-gitea-dependency-file: ${fossa-dir}/dependencies.gitea.yaml
+ 
+
+    - fossa-2pp-dependency-file: ${fossa-dir}/dependencies.2pp.yaml
+    - fossa-3pp-dependency-file: ${fossa-dir}/dependencies.3pp.yaml
+    - license-agreement-gitea : ${license-dir}/license-agreement-gitea.yaml
+
+    # properties for generic tasks
+    # consts
+    - timeout: 300
+    - scas-name-scan-threshold: 90
+    - scas-version-scan-threshold: 90
+    - scas-product-id: 9829
+    - scas-product-version-id: 13558
+    - fossa-team-name: aiml-mlops-mxe
+    # empty defaults
+    - fossa-config: ""
+    - fossa-project-name: ""
+    - fossa-report-name: ""
+    - fossa-project-dir: ""
+    - dependency-file-name: ""
+    - license-agreement-file: ""
+    
+env:
+    - DOCKER_NETWORK (default=--network host)
+    - HOME
+    - PWD
+
+
+    # Default docker image tags
+    - RELEASE_AUTO_TAG (default=latest)
+    - CI_TOOLKIT_TAG (default=latest)
+    - MVN_BUILDER_TAG (default=latest)
+
+    # FOSSA
+    - FOSSA_ARTIFACT_HASH
+    - FOSSA_API_KEY
+
+    # SCAS
+    - SCAS_REFRESH_TOKEN
+
+var:
+    - version
+    - image_version
+    - fossa_image_version
+    - fossa-available
+    - image-build-check
+
+rules:
+    clean:
+        - task: rm
+          cmd:
+              - rm -rf *${fossa-argowf-report-name}
+    set-image-version:
+        - task: set-image-version
+          docker-image: adp-release-auto
+          docker-flags:
+              - "--volume ${env.PWD}:${env.PWD}"
+              - "--volume ${env.HOME}:${env.HOME}"
+          cmd: yq '.images[]|select(.name=="eric-lcm-git-repository-gitea")|.tag' helm/eric-lcm-git-repository/eric-product-info.yaml | tr -d '"' > .bob/var.fossa_image_version
+    fossa-server-check:
+        - task: check-status
+          condition: conditions:check-if-image-build-required
+          docker-image: adp-release-auto
+          cmd:
+            - sh -c 'if curl ${fossa-server-endpoint}; then
+                echo "FOSSA server available.";
+                echo true > .bob/var.fossa-available;
+                else
+                echo "Unable to connect to FOSSA server. Skipping FOSSA Analysis.";
+                echo false > .bob/var.fossa-available;
+                fi'
+ 
+    fossa-gitea-analyze:
+        - task: analyze
+          condition: conditions:check-if-image-build-required AND check-if-fossa-server-reachable
+          docker-image: adp-go-builder
+          docker-flags:
+              - "--env FOSSA_API_KEY=${env.FOSSA_API_KEY}"
+              - "--env GOPATH=$PWD/build/go"
+              - "--env HOME=${env.HOME}"
+              - "--volume ${env.HOME}:${env.HOME}"
+          cmd: sh -c 'cd ${common.gitea-path};fossa analyze --revision ${var.fossa_image_version} --team ${fossa-team-name} --endpoint ${fossa-server-endpoint} --project ${fossa-gitea-project-name} --exclude-path ./sdks/ --exclude-path ./ui/ --exclude-path ./dev/nix/' || true
+
+    fossa-gitea-status-check:
+        - task: fossa-scan-status-check
+          condition: conditions:check-if-image-build-required AND check-if-fossa-server-reachable
+          docker-image: adp-release-auto
+          docker-flags:
+              - "--env FOSSA_API_KEY=${env.FOSSA_API_KEY}"
+          cmd: fossa_scan_status_check -s ${fossa-server-endpoint} -f custom -p ${fossa-gitea-project-name} -r ${var.fossa_image_version} -t ${env.FOSSA_API_KEY} -dl 15
+
+    fossa-gitea-report-attribution:
+        - task: fetch-fossa-report-attribution 
+          condition: conditions:check-if-image-build-required AND check-if-fossa-server-reachable
+          docker-image: adp-maven-builder
+          docker-flags:
+              - "--env FOSSA_API_KEY=${env.FOSSA_API_KEY}"
+          cmd: fossa report --json attribution
+              --endpoint ${fossa-server-endpoint}
+              --project ${fossa-gitea-project-name}
+              --revision ${var.fossa_image_version} --timeout 15000 > ${fossa-gitea-report-name}    
+                
+    fossa-generic-dependency-validate:
+        - task: fossa-generic-dependency-validate
+          condition: conditions:check-if-image-build-required AND check-if-fossa-server-reachable
+          docker-image: adp-release-auto
+          cmd: bash -c '''
+            set -eux -o pipefail;
+            if [ -z ${dependency-file-name} ]; then
+              echo "fossa-generic-dependency-validate cannot be run without setting dependency-file-name";
+              echo "Create a new rule that invokes fossa-generic-dependency-validate and sets dependency-file-name";
+              exit 1;
+            fi;
+            dependencies validate --dependencies ${dependency-file-name} --allow-esw4; '''
+    
+    fossa-gitea-dependency-validate:
+        - rule: fossa-generic-dependency-validate
+          properties:
+            - dependency-file-name: ${fossa-gitea-dependency-file}  
+    fossa-2pp-dependency-validate:
+        - rule: fossa-generic-dependency-validate
+          properties:
+            - dependency-file-name: ${fossa-2pp-dependency-file}
+    
+    fossa-3pp-dependency-validate:
+        - rule: fossa-generic-dependency-validate
+          properties:
+            - dependency-file-name: ${fossa-3pp-dependency-file}
+    
+###### manual tasks - used during 3pp uplifts #######
+#####################################################
+##### scas scan #####
+
+    scas-update-generic:
+      - task: scas-scan
+        docker-image: adp-release-auto
+        cmd: bash -c '''
+          set -eux -o pipefail;
+          if [ -z ${fossa-report-name} ] || [ -z ${dependency-file-name} ]; then
+            echo "scas-scan-generic cannot be run without setting fossa-report-name and dependency-file-name";
+            echo "Create a new rule that invokes scas-scan-generic and sets fossa-report-name, dependency-file-name";
+            exit 1;
+          fi;
+          dependencies update --fossa-report ${fossa-report-name} --dependencies ${dependency-file-name} --scan-scas --scas-refresh-token ${env.SCAS_REFRESH_TOKEN} --link-dependencies --sort --name-scan-threshold ${scas-name-scan-threshold} --version-scan-threshold ${scas-version-scan-threshold};'''
+    
+    scas-update-gitea:
+      - rule: scas-update-generic
+        properties:
+          - fossa-report-name: ${fossa-gitea-report-name}
+          - dependency-file-name: ${fossa-gitea-dependency-file}
+### scas scan end ###
+
+### scas registration start ###
+
+    scas-register-generic:
+      - task: scas-register 
+        docker-image: adp-release-auto
+        cmd: bash -c '''
+          set -eux -o pipefail;
+          if [ -z ${dependency-file-name} ]; then
+            echo "scas-register-generic cannot be run without setting dependency-file-name";
+            echo "Create a new rule that invokes scas-register-generic and sets dependency-file-name";
+            exit 1;
+          fi;
+          dependencies register --dependencies ${dependency-file-name} --scas --scas-refresh-token ${env.SCAS_REFRESH_TOKEN} --productid ${scas-product-id} --versionid ${scas-product-version-id};'''
+
+    scas-register-gitea:
+      - rule: scas-register-generic
+        properties:
+          - dependency-file-name: ${fossa-gitea-dependency-file}
+### scas registration end ###
+
+### license generation start ###
+
+    generic-license-agreement-generate:
+      - task: license-agreement-generate 
+        docker-image: adp-release-auto
+        cmd: bash -c '''
+          set -eux -o pipefail;
+          if [ -z ${fossa-report-name} ] || [ -z ${dependency-file-name} ] || [ -z ${license-agreement-file} ]; then
+            echo "generic-license-agreement-generate cannot be run without setting fossa-report-name, dependency-file-name and license-agreement-file";
+            echo "Create a new rule that invokes generic-license-agreement-generate and sets fossa-report-name, dependency-file-name, license-agreement-file";
+            exit 1;
+          fi;
+          license-agreement generate --dependencies ${dependency-file-name} \
+            --fossa-report ${fossa-report-name} \
+            --output ${license-agreement-file};'''
+    
+    license-agreement-generate-gitea:
+      - rule: generic-license-agreement-generate
+        properties:
+          - fossa-report-name: ${fossa-gitea-report-name}
+          - dependency-file-name: ${fossa-gitea-dependency-file}
+          - license-agreement-file: ${license-agreement-gitea}
+    
+    
+    license-agreement-generate-3pp:
+      - rule: generic-license-agreement-generate
+        properties:
+          - fossa-report-name: ${fossa-3pp-report-name}
+          - dependency-file-name: ${fossa-3pp-dependency-file}
+          - license-agreement-file: ${license-agreement-gitea}
+
+    license-agreement-merge:
+      - task: merge-license-agreement
+        docker-image: adp-release-auto
+        cmd: bash -c '''
+          set -eux -o pipefail;
+          mkdir -p $(dirname ${common.license-agreement-source-file-path});
+          license-agreement merge \
+              --license-agreement ${license-agreement-gitea} \
+              --output ${common.license-agreement-source-file-path};'''
+
+### license generation end ###
+
+## manual tasks end
+    conditions:
+    - task: check-if-image-build-required
+      cmd:  test "${var.image-build-check}" = "true" 
+    - task: check-if-fossa-server-reachable
+      cmd:  test "${var.fossa-available}" = "true"

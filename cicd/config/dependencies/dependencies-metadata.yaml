@@ -1,0 +1,20 @@
+##########################################################################################################
+# File for storing the information that must be 'manually' filled in the dependencies-3pp.yaml file.     #
+#                                                                                                        #
+# The attributes stored for each dependency ID in this file will override the attributes generated       #
+# by the dependencies update script via dependencies enrich partial patch feature:                       #
+# https://gerrit-gamma.gic.ericsson.se/plugins/gitiles/adp-cicd/bob-adp-release-auto/+/master/foss/#Partial-Patch  #
+#                                                                                                        #
+# This allowws a continuous generation of the dependencies-3pp.yaml files. The patching order is         #
+# sequential, and the default matching strategy is 'substring', allowing an entry such as:               #
+# -ID: org.apache                                                                                        #
+# to patch all entries starting with org.apache. Other matching strategies such as regex pattern can     #
+# also be used to match specific versions of a 3PP family. Eg:                                           #
+# - ID: regex_matcher: org.springframework.boot.*\+3.1.2 will patch all spring boot dependencies with    #
+# version 3.1.2                                                                                          #
+#                                                                                                        #
+##########################################################################################################
+
+modelVersion: 3.0
+dependencies:
+

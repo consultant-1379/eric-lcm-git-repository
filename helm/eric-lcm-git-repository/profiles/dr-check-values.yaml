@@ -1,0 +1,63 @@
+global:
+  security:
+    tls:
+      enabled: false 
+  networkPolicy:
+    enabled: false
+imageCredentials:
+  pullSecret: IMAGE_PULL_SECRET
+
+ingress:
+  enabled: true
+  ingressClass: eric-tm-ingress-controller-cr
+  hostname: eric-lcm-git-repository.vcluster14.kroto005.rnd.gic.ericsson.se
+  tls:
+    enabled: true
+    secretName: eric-lcm-git-repository-tls
+
+initConfig:
+  enabled: true
+
+documentDatabasePG:
+  customObject:
+    enabled: true
+
+appArmorProfile:
+  type: "runtime/default"
+
+seccompProfile:
+  type: "RuntimeDefault"
+
+# gitea config values
+gitea:
+  admin:
+    email: "gitea@local.domain"
+    secret: gitea-admin-secret
+  config:
+    redis:
+      cache:
+        enabled: true
+      serviceName: eric-data-key-value-database-rd-cluster
+      port: 6379
+      serviceUser:
+          secret:
+            name: eric-lcm-git-repository-redis-service-user
+            userKey: user
+            passwordKey: password
+    database:
+      DB_TYPE: postgres
+      HOST: eric-data-document-database-pg:5432
+      NAME: gitea
+      serviceUser:
+        secret:
+          #secret with following name will be created if initconfig enabled
+          #secret containing service user credentials
+          name: eric-lcm-git-repository-pg-service-user
+          userKey: user
+          passwordKey: password
+    metrics:
+      ENABLED: true
+
+keyValueDatabaseRD:
+  customObject:
+    enabled: true

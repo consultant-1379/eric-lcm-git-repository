@@ -1,0 +1,17 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}-shared-volume
+  namespace: {{ $.Release.Namespace }}
+  labels: {{ include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations: {{ include "eric-lcm-git-repository.annotations" . | nindent 4 }}
+spec:
+  accessModes:
+        {{- range $index, $item := .Values.persistence.persistentVolumeClaim.accessModes }}
+        - {{ $item -}}
+        {{- end }}
+  volumeMode: Filesystem
+  {{- include "eric-lcm-git-repository.persistence.storageClass" . | nindent 2 -}}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.persistentVolumeClaim.size }}

@@ -1,0 +1,4 @@
+apiVersion: v2
+description: A Helm chart for SM Resources necessary for git-repository deployment [pre-requisites]
+name: eric-service-mesh-config
+version: 1.0.0-0

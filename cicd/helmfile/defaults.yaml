@@ -1,0 +1,22 @@
+repositories:
+  - name: adp-gs-all-helm
+    url: https://arm.sero.gic.ericsson.se/artifactory/proj-adp-gs-released-helm
+    username: {{ requiredEnv "SELI_ARTIFACTORY_REPO_USER" }}
+    password: {{ requiredEnv "SERO_ARTIFACTORY_REPO_API_KEY" }}
+  - name: adp-osmn-helm
+    url: https://arm.sero.gic.ericsson.se/artifactory/proj-adp-eric-data-object-storage-mn-released-helm/
+    username: {{ requiredEnv "SELI_ARTIFACTORY_REPO_USER" }}
+    password: {{ requiredEnv "SERO_ARTIFACTORY_REPO_API_KEY" }}
+  - name: adp-mlops-drop-helm
+    url: https://arm.seli.gic.ericsson.se/artifactory/proj-mlops-drop-helm/
+    username: {{ requiredEnv "SELI_ARTIFACTORY_REPO_USER" }}
+    password: {{ requiredEnv "SELI_ARTIFACTORY_REPO_API_KEY" }}
+
+helmDefaults:
+    wait: true
+    waitForJobs: true
+    timeout: 600
+    createNamespace: true
+
+commonLabels:
+    env: ci

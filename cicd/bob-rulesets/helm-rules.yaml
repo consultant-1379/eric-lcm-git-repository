@@ -1,0 +1,176 @@
+modelVersion: 2.0
+
+
+description: "Helm Build Rules"
+
+
+import:
+  common: common-rules.yaml
+
+
+docker-images:
+    - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:${env.RELEASE_AUTO_TAG}
+    - ci-toolkit: armdocker.rnd.ericsson.se/proj-mxe-ci-internal/ci-toolkit:${env.CI_TOOLKIT_TAG}
+    - adp-helm-dr-check: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/common-library-adp-helm-dr-check:${env.HELM_DR_CHECK_TAG}
+
+properties:
+    - helm-adp-dr-check-docker-flags: "${helm-docker-extra-flags}"
+    - helm-adp-release-docker-flags:
+        --env HELM_USER
+        --env HELM_TOKEN
+        ${helm-docker-extra-flags}
+
+    - helm-docker-extra-flags: " "
+    - helm-extra-flags: " "
+
+    # Helm properties
+    - chart-app-version: ${var.chart-app-version}
+    - chart-name: ${var.chart-name}
+
+    - chart-version: ${var.chart-version}
+
+    - helm-design-rules-skip: ${var.helm-design-rules-skip}
+
+    - chart-source-directory: ${var.chart-source-directory}
+    - chart-output-directory: ${var.chart-output-directory}
+    - chart-file-drop: ${chart-output-directory}/${chart-name}-${chart-version}.tgz
+
+    - chart-file: ${chart-file-drop}
+
+    - helm-repo-path: ""
+    - helm-repository: ${env.HELM_REPOSITORY}
+    - helm-repository-username: ${env.HELM_USER}
+    - helm-repository-password: ${env.HELM_TOKEN}
+    - helm-repositories-file: .bob/.helm/repositories.yaml
+    - helm-virtual-repository: ${helm-repository}
+    - helm-dr-reports-directory: ${var.helm-dr-reports-directory}
+    - chart-ci-artifacts-directory: ${common.ci-artifacts-directory}/helm
+
+
+var:
+    - chart-name
+    - chart-output-directory
+    - chart-source-directory
+    - chart-version
+    - chart-app-version
+    - helm-design-rules-skip
+    - helm-design-rules-status-code
+    - helm-dr-reports-directory
+    - image-repopath-internal
+
+
+env:
+    - HELM_REPOSITORY
+    - HELM_TOKEN (default=${common.arm-token})
+    - HELM_USER (default=${common.arm-user})
+
+    - RELEASE_AUTO_TAG (default=latest)
+    - CI_TOOLKIT_TAG (default=latest)  
+    - HELM_DR_CHECK_TAG (default=latest)
+    - CREDENTIALS_SELI_ARTIFACTORY_PSW
+    - CREDENTIALS_SELI_ARTIFACTORY_USR
+    - SELI_ARTIFACTORY_REPO_USER (default=${env.CREDENTIALS_SELI_ARTIFACTORY_USR})
+    - SELI_ARTIFACTORY_REPO_PASS (default=${env.CREDENTIALS_SELI_ARTIFACTORY_PSW})
+    - SELI_ARTIFACTORY_REPO_PASS
+    - SELI_ARTIFACTORY_REPO_API_KEY
+
+rules:
+  init:
+    - task: init-variables
+      cmd:
+        - echo "" > .bob/var.chart-app-version
+        - echo "${chart-app-version}" > .bob/var.chart-app-version
+
+        - echo "" > .bob/var.chart-name
+        - echo "${chart-name}" > .bob/var.chart-name
+
+        - echo -n "helm/${chart-name}" > .bob/var.chart-source-directory
+        - echo -n "${chart-source-directory}" > .bob/var.chart-source-directory
+
+        - echo -n "${common.ci-build-directory}/helm" > .bob/var.chart-output-directory
+        - echo -n "${chart-output-directory}" > .bob/var.chart-output-directory
+
+        - echo "" > .bob/var.chart-version
+        - echo "${chart-version}" > .bob/var.chart-version
+
+        - echo "" > .bob/var.helm-design-rules-skip
+        - echo "${helm-design-rules-skip}" > .bob/var.helm-design-rules-skip
+
+        - echo "${common.ci-build-directory}/helm/adp_dr" > .bob/var.helm-dr-reports-directory
+        - echo "${helm-dr-reports-directory}" > .bob/var.helm-dr-reports-directory
+
+        - mkdir -p ${chart-ci-artifacts-directory}
+
+
+  lint:
+    - task: helm-lint
+      docker-image: adp-release-auto
+      docker-flags:
+        - ${helm-adp-release-docker-flags}
+      cmd: helm lint ${chart-source-directory} ${helm-extra-flags}
+
+
+  design-rule:
+    - task: helm-check-dr
+      docker-image: adp-helm-dr-check
+      docker-flags:
+        - ${helm-adp-dr-check-docker-flags}
+      cmd: /bin/bash -c '
+              helm-dr-check ${helm-design-rules-skip} --helm-chart ${chart-file} --helm-v3 --output ${helm-dr-reports-directory} ${helm-extra-flags};
+              echo $? > .bob/var.helm-design-rules-status-code; '
+    - task: archive-reports
+      cmd:
+        - mkdir -p ${common.ci-html-reports-directory}/helm
+        - cp -f ${helm-dr-reports-directory}/design-rule-check-report.html ${common.ci-html-reports-directory}/helm/helm_adp_dr_check_report.html;
+        - tar -zcf ${chart-ci-artifacts-directory}/helm_adp_dr_check_report.tar.gz ${helm-dr-reports-directory}
+        # - '[ "${var.helm-design-rules-status-code}" == "0" ]' Will be uncommented once DR checks are addressed
+
+
+  package:
+    - task: helm-package
+      docker-image: adp-release-auto
+      docker-flags:
+        - ${helm-adp-release-docker-flags}
+      cmd:
+        - helm-package
+            --workdir ${chart-output-directory}
+            --folder ${chart-source-directory}
+            --version ${chart-version}
+            --app-version ${chart-app-version}
+            --helm-user ${env.SELI_ARTIFACTORY_REPO_USER}
+            --arm-api-token ${env.SELI_ARTIFACTORY_REPO_API_KEY}
+            ${helm-extra-flags}
+        - cp ${chart-output-directory}/*.tgz ${chart-ci-artifacts-directory}/
+
+
+  push:
+    - task: helm-push
+      docker-image: adp-release-auto
+      docker-flags:
+        - ${helm-adp-release-docker-flags}
+      cmd: upload_file.sh
+          --filename=${chart-file-drop}
+          --repository=${helm-repo-path}/${chart-name}
+          --api-token=${env.SELI_ARTIFACTORY_REPO_API_KEY}
+          --overwrite=true 
+
+
+  repositories-add:
+    - task: create-repositories
+      condition: conditions:repositories-file-missing
+      cmd:
+        - mkdir -p $(dirname ${helm-repositories-file})
+        - echo "repositories:" > ${helm-repositories-file}
+    - task: add-repositories
+      cmd: |
+          echo " - name: $(basename ${helm-repository})" >> ${helm-repositories-file};
+          if [ ! -z "${helm-repository-password}" ] && [ ! -z "${helm-repository-username}" ]; then
+            echo "   password: ${helm-repository-password}" >> ${helm-repositories-file};
+            echo "   username: ${helm-repository-username}"  >> ${helm-repositories-file};
+          fi;
+          echo "   url: ${helm-repository}"  >> ${helm-repositories-file};
+
+
+  conditions:
+    - task: repositories-file-missing
+      cmd: "[ ! -f ${helm-repositories-file} ]"

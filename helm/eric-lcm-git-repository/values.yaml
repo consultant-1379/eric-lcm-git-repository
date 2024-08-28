@@ -1,0 +1,538 @@
+# Default values for eric-lcm-git-repository.
+
+# Override the service name.
+nameOverride: ""
+
+# Override fully qualified service name.
+fullnameOverride: ""
+
+# Global parameters shall be defined in the top level values.yaml
+# They are kept here for indicating which are supported and their default values.
+#
+#global:
+#  # Node selectors for the service pods.
+#  # If global or local node selectors are set, they are merged.
+#  nodeSelector: {}
+
+#  # Global image registry pull secret. It can be overridden locally by imageCredentials.pullSecret.
+#  pullSecret:
+
+#  registry:
+#    # Global Docker registry url.
+#    url:
+#    # Global repository path.
+#    repoPath:
+#    imagePullPolicy:
+
+#  # Global setting for IP family. The value can be either IPv4 or IPv6.
+#  internalIPFamily:
+
+#  security:
+#    # Enables/Disables tls intra-cluster communication. Requires SIP-TLS.
+#    tls:
+#      enabled: true
+#    # policyBinding and policyReferenceMap fields are only valid if Pod Security Policy (PSP) is enabled in the cluster.
+#    policyBinding:
+#      create: true
+#    policyReferenceMap:
+#      default-restricted-security-policy:
+
+#  documentDatabasePG:
+#    operator:
+#      enabled: false
+
+#  ingress:
+#    # Ingress Controller CR deployment name
+#    serviceReference: eric-tm-ingress-controller-cr
+#    # Ingress Controller ingress class
+#    ingressClass:
+
+#  serviceMesh:
+#    enabled: true
+#  networkPolicy:
+#    # Enable or disable Network Policies.
+#    enabled: false
+
+#  # Tolerations allow the scheduler to schedule pods with matching taints. Service level toleration take precedence over global toleration.
+#  tolerations: []
+
+# # Number of Pods to deploy in Kubernetes cluster.
+# replicaCount: 2
+
+initConfig:
+  enabled: false
+  db:
+    pg:
+      # Used to create gitea database, if initConfig.enabled = true is
+      superUser:
+        secret:
+          #secret containing super user credentials
+          name: eric-lcm-git-repository-pg-super-user
+          pwdKey: super-pwd
+  hookWeightInitJob: 3
+  hookWeightInitResources: -5
+  ttlSecondsAfterFinished: 600
+  jobBackOffLimit: 3
+
+
+
+# gitea config values:
+gitea:
+  admin:
+    email: "gitea@local.domain"
+    secret: gitea-admin-secret
+  relativeURL: /
+  config:
+    redis:
+      cache:
+        enabled: true
+      serviceName: eric-data-key-value-database-rd-cluster
+      port: 6379
+      tlsPort: 6380
+      serviceUser:
+          secret:
+            name: eric-lcm-git-repository-redis-service-user
+            userKey: user
+            passwordKey: password
+    database:
+      DB_TYPE: "postgres"
+      # The value should be based on .Values.documentDatabasePG.customObject.instanceName and .Values.documentDatabasePG.customObject.portNumber
+      HOST: eric-data-document-database-pg:5432
+      NAME: gitea
+      # serviceUser is not part of original gitea chart. 
+      # It's added to avoid exposing DB credentials in values.yaml
+      # By using this secret, we will populate the Keys USER and PASSWD.
+      serviceUser:
+        secret:
+          #secret with following name will be created if initconfig enabled
+          #secret containing service user credentials
+          name: eric-lcm-git-repository-pg-service-user
+          userKey: user
+          passwordKey: password
+    metrics:
+      ENABLED: true
+
+# PG Details
+documentDatabasePG:
+  customObject:
+    enabled: true
+    metrics:
+      enabled: false
+    instanceName: "eric-data-document-database-pg"
+    portNumber: 5432
+    replicaCount: 2
+    log:
+      level: info
+      streamingMethod: ""
+    backupRestore:
+      enabled: true
+      backupType: "gitea"
+    databaseServerConfig:
+      authentication:
+        # This value overrides the settings provided by "global.security.tls.enabled" flag
+        # Currently, if the flag is set to true, mode will be mTLSonly. If false, mode will be password
+        # If support for both is required, override this flag to mTLSoptional
+        mode: password
+        passwordsSecretReference: eric-lcm-git-repository-pg-super-user
+      settings:
+    resources:
+      flavor: typical
+      persistentStorage:
+        housekeepingThresholdPercentage:
+        documentDatabasePGVolume:
+          persistentVolumeClaim:
+            size: 4Gi
+            storageClassName:
+  
+
+keyValueDatabaseRD:
+  customObject:
+    enabled: true
+    metrics: 
+      enabled: false
+    instanceName: eric-data-key-value-database-rd-cluster
+    resources:
+      flavor: "medium-size-medium-throughput"
+    replicas:
+      masters: 1
+      replicationFactor: 1 
+    security:
+      acl:
+        enabled: true
+
+serviceMesh:
+  # DR-D470217-007-AD - per service parameter to determine if a specific service
+  # makes use of service mesh. Default is 'true'.
+  enabled: true
+  # DR-D470217-086-AD - In case a service participating in the service mesh decides not to use service mesh mTLS,
+  # it SHALL specify a service specific PeerAuthentication policy disabling mTLS, which would take precedence over the global policy.
+  tls:
+    enabled: false
+    mode: DISABLE # service mTLS mode
+
+  # Service name and port of the service mesh gateway
+  # To be used by HTTP Proxy / NGINX Cluster ingress
+  gateway:
+    serviceName: eric-lcm-git-repository-sm-gateway
+    httpPort: 80
+    httpsPort: 443
+
+  # DR-D470217-055-AD - service mesh that need to be exposed to external SHALL use an ADP SM Ingress Gateway.
+  # VirtualService custom resource needs to be defined to route the traffic entering the gateway to the service.
+  ingress:
+    enabled: true
+    # GW, host and pathPrefix configuration for VirtualService
+    # gwName is name of the Ingress Gateway Custom Resource
+    gwName: eric-lcm-git-repository-gateway
+    host: "*"
+
+  egress:
+    ca:
+      genSecretName: eric-sec-sip-tls-trusted-root-cert
+      caCertsPath: /etc/istio/egress-ca-certs/
+    documentdatabasepg:
+      enabled: true
+      serviceName: eric-data-document-database-pg
+      genSecretName: eric-data-document-database-pg-http-cert
+      certsPath: /etc/istio/db/egress-certs/
+      tlsMode: MUTUAL
+      caIssuer: eric-data-document-database-pg-client-ca
+      commonName: gitea
+    keyvaluedatabaserd:
+      enabled: true
+      serviceName: eric-data-key-value-database-rd-cluster
+      genSecretName: eric-data-key-value-database-rd-cluster-cert
+      certsPath: /etc/istio/redis/egress-certs/
+      tlsMode: MUTUAL
+      caIssuer: eric-data-key-value-database-rd-cluster-redis-client-ca
+      commonName: gitea
+# # Create HorizontalPodAutoscaler object.
+# autoScaling:
+#   # Enables/Disables Kubernetes pod auto scaling.
+#   enabled: false
+#   # Conditional, if autoScaling is enabled: Autoscaling minimum replica count
+#   minReplicas: 2
+#   # Conditional, if autoScaling is enabled: Autoscaling maximum replica count
+#   maxReplicas:
+#   # Conditional, if autoScaling is enabled: Threshold CPU usage
+#   cpuThreshold:
+
+# Update strategy for service deployment.
+updateStrategy:
+  # Define the update strategy type.
+  type: RollingUpdate
+  rollingUpdate:
+    # The amount (number or percentage) of pods that can be unavailable during the update process.
+    maxUnavailable: "25%"
+    # The amount (number or percentage) of pods that can be created above the desired amount of pods during an update.
+    maxSurge: "25%"
+
+# PDB defines how many instances can be down at the same time for a
+# short period due to a voluntary disruption.
+# The values for minAvailable and maxUnavailable are mutually exclusive.
+podDisruptionBudget:
+  # Minimum number/percentage of Pods that must remain available during the planned disruption.
+  # Value can be expressed as an integer or as a percentage. When specified as a percentage of the Pods,
+  # if it does not map to an exact number, Kubernetes rounds up to the nearest integer.
+  # minAvailable: 2 # example value for 2 pods defined as integer
+  minAvailable: "50%"
+
+  # Maximum number/percentage of Pods that can be unavailable during the planned disruption.
+  # Value can be expressed as an integer or as a percentage. When specified as a percentage of the Pods,
+  # if it does not map to an exact number, Kubernetes rounds up to the nearest integer.
+  # if maxUnavailable is set, the value for podDisruptionBudget.minAvailable is ignored.
+  # maxUnavailable: 2 # example value for 2 pods defined as integer
+  # maxUnavailable: "50%" # example value for 50% of pods defined as percentage
+  maxUnavailable:
+
+# Log level configuration. Can be any of critical, error, warning, info, debug, trace, all or off
+# logLevel:
+#   # Service log level
+#   service: info
+
+# # Additional log level for custom log
+# extraLogLevel: [ ]
+# # - com.ericsson.custom: info
+
+# Allow additional labels to be attached to every resource created within the service
+labels: { }
+
+# Allow additional annotations to be attached to every resource created within the service
+annotations: { }
+#  ericsson.com/my-info-key: "my-info-value"
+#  ericsson.com/more-key: "more-value"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the chart name template.
+  name:
+
+service:
+  http:
+    type: ClusterIP
+    port: 3000
+
+ingress:
+  # If true, an ingress routes and virtual host will be created for this api
+  enabled: true
+  # Ingress Controller CR deployment name
+  serviceReference: eric-tm-ingress-controller-cr
+  # Whether it should create HTTPProxy routes even with ingress.enabled = true.
+  createRoutes: true
+  # The ingress host fully qualified domain name (FQDN). Conditional, mandatory if ingress is enabled.
+  hostname: 
+  # Names of the certificates created via ADP Certificate Management
+  # certificates:
+  #   # Name of both server-side asymmetric key and certificate
+  #   # If not provided, default is eric-lcm-git-repository-ingress-http-server
+  #   asymmetricKeyCertificateName:
+  #   # Name of the list of trusted client CAs
+  #   # If not provided, default is eric-lcm-git-repository-ingress-http-server
+  #   trustedCertificateListName:
+  #   # Enable CRL file based certificate revocation check
+  #   crlEnabled: false
+  tls:
+    # Enables/Disables mTLS for external traffic
+    enabled: false
+    secretName:
+    client:
+      rootCaSecret:
+      subjectName:
+    # Client certificate verification for mTLS.
+    #   - Required: client certificate must be provided. Only HTTPS is allowed.
+    # Optional client certificate verification is not supported.
+    # Set it to empty or null to disable client certificate verification.
+    verifyClientCertificate: required
+  # Ingress class name
+  ingressClass: eric-tm-ingress-controller-cr
+  # Ingress additional annotations
+  annotations: {}
+
+# Graceful shutdown uses a timeout which provides a grace period during which existing requests will be allowed
+# to complete but no new requests will be permitted.  The value zero indicates delete immediately.
+# If this value is null, the default grace period will be used instead. Defaults to 30 seconds.
+terminationGracePeriodSeconds: 30
+
+networkPolicy:
+  # Enable or disable Network Policies.
+  enabled: true
+
+# Node selectors for the service pod.
+nodeSelector: {}
+
+# The rate in megabit-per-second at which traffic can leave the Pod.
+bandwidth:
+  maxEgressRate: 
+
+# List of topology spread constraints that can be used to control how Pods are spread across your
+# cluster among failure domains such as regions, zones, nodes, and other user-defined topology domains.
+topologySpreadConstraints: []
+  # Describes the degree to which Pods may be unevenly distributed.
+  #- maxSkew:
+    # Topology key to be used for the spread constrain.
+    #topologyKey:
+    # Indicates how to deal with a Pod if it doesn't satisfy the spread constraint.
+    # DoNotSchedule tells the scheduler not to schedule it.
+    # ScheduleAnyway tells the scheduler to still schedule it while prioritizing nodes that minimize the skew.
+    #whenUnsatisfiable:
+
+# Tolerations allow the scheduler to schedule pods with matching taints. Service level toleration take precedence over global toleration.
+tolerations: []
+#  - key: node.kubernetes.io/not-ready
+#    operator: Exists
+#    effect: NoExecute
+#    tolerationSeconds: 0
+#  - key: node.kubernetes.io/unreachable
+#    operator: Exists
+#    effect: NoExecute
+#    tolerationSeconds: 0
+
+affinity:
+  # Determines whether Pods are required (hard) or only preferred (soft) to run on different nodes.
+  # podAntiAffinity can be hard or soft.
+  podAntiAffinity: "soft"
+  # This pod should be co-located (affinity) or not co-located (anti-affinity) with the pods matching the labelSelector in the specified namespaces.
+  # Co-located pods run on nodes whose value of the label with key topologyKey matches that of any other node where any of the selected pods are running.
+  # Empty topologyKey is not allowed.
+  topologyKey: "kubernetes.io/hostname"
+
+podPriority:
+  # Priority class name for the service Pod. Priority classes are used to determine the priority of Pods when scheduling them on nodes.
+  gitRepository:
+    priorityClassName:
+  gitRepositoryInitInitializer:
+    priorityClassName:
+
+imageCredentials:
+  # Common repository path for all containers.
+  repoPath:
+  registry:
+    imagePullPolicy: # overrides global image pull policy
+    url: # overrides registry url from global & eric-product-info.yaml
+  # Image registry pull secret.
+  pullSecret: # overrides global pull secret
+  gitRepository:
+    registry:
+      # Specific Docker registry url for a service.
+      url: # overrides registry url from global, imageCredentials.registry.url & eric-product-info.yaml
+      # Specific Image pull policy for a service.
+      imagePullPolicy:
+    # Specific repository path for a service.
+    repoPath: # overrides repoPath from imageCredentials.repoPath & eric-product-info.yaml
+  eric-aiml-initializer:
+    registry:
+        url: # overrides registry url from global, imageCredentials.registry.url & eric-product-info.yaml
+        imagePullPolicy:
+    repoPath: # overrides repoPath from imageCredentials.repoPath & eric-product-info.yaml
+
+resources:
+  gitRepository:
+    limits:
+      # CPU resource limit for the service container.
+      # The container CPU usage may be throttled to this value.
+      cpu: 2000m
+      # Memory resource limit for the service container.
+      # The container will be killed with an out-of-memory error if it goes above this limit. It must not be empty.
+      memory: "2Gi"
+      # Ephemeral storage limit capacity for the service container.
+      ephemeral-storage: ""
+    requests:
+      # CPU resource request for the service container.
+      cpu: 1000m
+      # Memory resource request for the service container.
+      memory: "512Mi"
+      # Ephemeral storage capacity request for the service container.
+      ephemeral-storage: ""
+
+  gitRepositoryInitInitializer:
+    limits:
+      # CPU resource limit for the service container.
+      # The container CPU usage may be throttled to this value.
+      cpu: 40m
+      # Memory resource limit for the service container.
+      # The container will be killed with an out-of-memory error if it goes above this limit. It must not be empty.
+      memory: 50Mi
+      # Ephemeral storage limit capacity for the service container.
+      ephemeral-storage: 50Mi
+    requests:
+      # CPU resource request for the service container.
+      cpu: 25m
+      # Memory resource request for the service container.
+      memory: "25Mi"
+      # Ephemeral storage capacity request for the service container.
+      ephemeral-storage: "50Mi"
+
+
+  gitRepositoryInit:
+    limits:
+      # CPU resource limit for the service container.
+      # The container CPU usage may be throttled to this value.
+      cpu: 2000m
+      # Memory resource limit for the service container.
+      # The container will be killed with an out-of-memory error if it goes above this limit. It must not be empty.
+      memory: "2Gi"
+      # Ephemeral storage limit capacity for the service container.
+      ephemeral-storage: ""
+    requests:
+      # CPU resource request for the service container.
+      cpu: 1000m
+      # Memory resource request for the service container.
+      memory: "512Mi"
+      # Ephemeral storage capacity request for the service container.
+      ephemeral-storage: ""
+
+  gitRepositoryInitAppIni:
+    limits:
+      # CPU resource limit for the service container.
+      # The container CPU usage may be throttled to this value.
+      cpu: 2000m
+      # Memory resource limit for the service container.
+      # The container will be killed with an out-of-memory error if it goes above this limit. It must not be empty.
+      memory: "2Gi"
+      # Ephemeral storage limit capacity for the service container.
+      ephemeral-storage: ""
+    requests:
+      # CPU resource request for the service container.
+      cpu: 1000m
+      # Memory resource request for the service container.
+      memory: "512Mi"
+      # Ephemeral storage capacity request for the service container.
+      ephemeral-storage: ""
+
+  gitRepositoryConfigureGitea:
+    limits:
+      # CPU resource limit for the service container.
+      # The container CPU usage may be throttled to this value.
+      cpu: 2000m
+      # Memory resource limit for the service container.
+      # The container will be killed with an out-of-memory error if it goes above this limit. It must not be empty.
+      memory: "2Gi"
+      # Ephemeral storage limit capacity for the service container.
+      ephemeral-storage: ""
+    requests:
+      # CPU resource request for the service container.
+      cpu: 1000m
+      # Memory resource request for the service container.
+      memory: "512Mi"
+      # Ephemeral storage capacity request for the service container.
+      ephemeral-storage: ""
+
+probes:
+  gitRepository:
+    livenessProbe:
+      # Minimum consecutive failures for the probe to be considered failed after having succeeded.
+      failureThreshold: 3
+      # Number of seconds after the container has started before liveness probes are initiated.
+      initialDelaySeconds: 0
+      # How often (in seconds) to perform the probe.
+      periodSeconds: 10
+      # Number of seconds after which the probe times out.
+      timeoutSeconds: 1
+    readinessProbe:
+      # Minimum consecutive failures for the probe to be considered failed after having succeeded.
+      failureThreshold: 3
+      # Number of seconds after the container has started before liveness probes are initiated.
+      initialDelaySeconds: 0
+      # How often (in seconds) to perform the probe.
+      periodSeconds: 5
+      # Minimum consecutive successes for the probe to be considered successful after having failed.
+      successThreshold: 1
+      # Number of seconds after which the probe times out.
+      timeoutSeconds: 1
+    startupProbe:
+      # Minimum consecutive failures for the probe to be considered failed after having succeeded.
+      failureThreshold: 20
+      # Number of seconds after the container has started before liveness probes are initiated.
+      initialDelaySeconds: 1
+      # How often (in seconds) to perform the probe.
+      periodSeconds: 1
+      # Number of seconds after which the probe times out.
+      timeoutSeconds: 1
+
+appArmorProfile:
+  # AppArmor profile type for the service container.
+  type: ""
+  # Localhost path to the AppArmor profile for the service container.
+  # Should only be set if appArmorProfile.type is set to localhost.
+  localhostProfile:
+
+seccompProfile:
+  # Seccomp profile type for the service container.
+  type: ""
+  # Localhost path to the seccomp profile for the service container.
+  # Should only be set if seccompProfile.type is set to Localhost.
+  localhostProfile:
+  gitRepositoryInitInitializer:
+    type:
+    localhostProfile:
+
+persistence:
+  persistentVolumeClaim:
+    size: 10Gi
+    accessModes: 
+      - ReadWriteOnce
+    storageClass:
+  
+

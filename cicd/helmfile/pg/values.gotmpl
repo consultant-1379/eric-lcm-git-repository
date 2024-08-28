@@ -1,0 +1,39 @@
+global:
+  networkPolicy:
+    enabled: {{ env "NETWORK_POLICY_ENABLED" | default false }}
+  documentDatabasePG:
+    operator:
+      enabled: {{ env "PG_OPERATOR_ENABLED" | default false }}
+{{ if and (eq (requiredEnv "PG_OPERATOR_ENABLED") "true") (eq (requiredEnv "LOGSHIPPER_ENABLED") "true") }}
+  logShipper:
+    deployment:
+      model: "static"
+{{ end }}
+  security:
+    tls:
+      enabled: {{ env "TLS_ENABLED" | default false }}
+imageCredentials:
+  pullSecret: {{ requiredEnv "ARM_DOCKER_CREDS" }}
+{{ if  eq (requiredEnv "TLS_ENABLED") "false" }}
+{{ if  eq (requiredEnv "PG_OPERATOR_ENABLED") "false" }}
+credentials:
+  kubernetesSecretName: eric-lcm-git-repository-pg-op-su-secret
+{{ end }}
+service:
+  endpoints:
+    postgres:
+      tls:
+        enforced: optional
+{{ end }}
+metrics:
+  enabled: false
+{{ if  eq (requiredEnv "PG_OPERATOR_ENABLED") "false" }}
+highAvailability:
+  replicaCount: 1
+{{ end }}
+{{ if eq (requiredEnv "LOGSHIPPER_ENABLED") "true" }}
+log:
+  streamingMethod: "dual"
+{{ end }}
+labels:
+   env: ci

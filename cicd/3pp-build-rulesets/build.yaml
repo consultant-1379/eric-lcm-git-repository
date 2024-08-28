@@ -1,0 +1,233 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+modelVersion: 2.0
+
+description: "AI/ML Pipeline Build Tasks"
+
+# See image catalog: https://confluence.lmera.ericsson.se/display/ACD/ADP+CICD+Docker+Image+Catalog
+docker-images:
+    - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:${env.RELEASE_AUTO_TAG}
+    - adp-image-dr-check: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/adp-image-dr-check:${env.IMAGE_DR_CHECK_TAG}
+    - adp-helm-dr-check: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/common-library-adp-helm-dr-check:${env.HELM_DR_CHECK_TAG}
+    - adp-go-builder: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-gobuilder.adp-base-os:${env.GO_BUILDER_TAG}
+    - ci-toolkit: armdocker.rnd.ericsson.se/proj-mxe-ci-internal/ci-toolkit:${env.CI_TOOLKIT_TAG}
+
+import:
+    common: ../common-properties.yaml
+
+properties:
+    - disabled-images-design-rules: "-DimageDesignRule.config.DR-D470203-041-A=disable -DimageDesignRule.config.DR-D470203-050-A=disable"
+    - dr-checkers-report-path: build/checker-reports
+    - image-checker-report-path: ${dr-checkers-report-path}/image
+    - changed-files: ${env.PWD}/.bob/changed-files.txt
+
+
+env: 
+    - HOME
+    - PWD 
+
+    # Docker
+    - BUILDKIT_PROGRESS (default=plain)
+    - DOCKER_BUILDKIT (default=1)
+    - DOCKER_NETWORK (default=--network host)
+
+    # Default docker image tags
+
+    - RELEASE_AUTO_TAG (default=latest)
+    - IMAGE_DR_CHECK_TAG (default=latest)
+    - HELM_DR_CHECK_TAG (default=latest)
+    - GO_BUILDER_TAG (default=latest)
+    - CI_TOOLKIT_TAG (default=latest)
+
+    # Credentials
+    - CREDENTIALS_SELI_ARTIFACTORY_USR
+    - CREDENTIALS_SELI_ARTIFACTORY_PSW
+    - SELI_ARTIFACTORY_REPO_USER (default=${env.CREDENTIALS_SELI_ARTIFACTORY_USR})
+    - SELI_ARTIFACTORY_REPO_PASS (default=${env.CREDENTIALS_SELI_ARTIFACTORY_PSW})
+    - SELI_ARTIFACTORY_REPO_API_KEY
+    - GERRIT_USERNAME
+    - GERRIT_PASSWORD
+    - EMAIL (default=mxecifunc@ericsson.com)
+    - ARM_API_TOKEN
+    - SERO_ARM_TOKEN #SERO ARM KEY for CBOS Check
+    - SERO_ARM_USER (default=mxecifunc)
+
+    # Build Parameters
+    - CI_USER (default=mxecifunc)
+    - GERRIT_CHANGE_OWNER_NAME (default=notset)
+
+var:
+    - image-full-name-internal
+    - image-full-name
+    - push-image-name
+    - version
+    - image_version
+    - commithash
+    - rstate
+    - helm-chart-repo-internal
+    - image-repopath-drop
+    - version-prefix
+    - image-repopath-internal
+    - image-dr-vm-args
+    - helm-chart-check-report-warnings
+    - cbos-version
+    - cbos-semver
+    - git-commit 
+    - git-tag
+    - git-tree-state
+    - image-build-date
+    - image-build-check
+    - changed-file-list
+
+rules:
+    # Clean workspace
+    clean:
+        - task: rm
+          cmd:
+              - rm -rf build/
+
+    init:
+        - task: image-dr-vm-args
+          cmd: echo ${disabled-images-design-rules} > .bob/var.image-dr-vm-args
+
+    # lint-license-check:
+    #     - task: license-check
+    #       docker-image: adp-maven-builder
+    #       docker-flags: 
+    #           - "--env HOME=${env.HOME}"
+    #           - "--volume ${env.HOME}:${env.HOME}"      
+    #       cmd: mvn -X license:check
+    
+    lint-2pp-versions:
+        - task: check-version 
+          docker-image: ci-toolkit
+          docker-envs:
+              - GERRIT_CHANGE_OWNER_NAME
+          cmd: bash -x cicd/scripts/check-2pp-version.sh
+          
+    build-images:
+    - rule: clone-repo
+    - rule: build-gitea-image
+    - rule: image-dr
+    - rule: cbo-check
+
+    clone-repo:
+    - task: clone-repo
+      condition: conditions:check-if-image-build-required 
+      cmd: bash -c '''
+            set -eux -o pipefail;
+            ${env.PWD}/cicd/scripts/clone_3pp_repo.sh --repoURL ${common.gitea-repo-url} --version ${common.gitea-version-tag} --clone-to ${common.gitea-path};'''
+    
+    build-gitea-image:
+    - task: build-gitea-image
+      condition: conditions:check-if-image-build-required 
+      cmd:
+            - DOCKER_BUILDKIT=1 docker buildx build ${common.gitea-path}/ ${env.DOCKER_NETWORK}
+              --progress=plain
+              --file ${env.PWD}/container/eric-lcm-git-repository/Dockerfile
+              --tag ${var.push-image-name}-gitea:${var.image_version}
+              --build-arg CBO_VERSION=${common.common-base-os-version}
+              --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+              --build-arg COMMIT=${var.commithash}
+              --build-arg APP_VERSION=${var.image_version}
+              --build-arg RSTATE=${var.rstate}
+              --build-arg IMAGE_PRODUCT_NUMBER=${common.gitea-image-product-number}
+              --build-arg IMAGE_PRODUCT_TITLE="${common.docker-image-title} Gitea"
+              --build-arg GITEA_VERSION=${common.gitea-version-tag}
+
+
+    image-dr:
+    - task: image-dr-check
+      condition: conditions:check-if-image-build-required 
+      docker-image: adp-image-dr-check
+      docker-in-docker: socket
+      cmd: bash -c ''' 
+        set -eux;
+        mkdir -p ${image-checker-report-path};
+        images=(
+          ${var.push-image-name}-gitea:${var.image_version}
+        );
+        for image in "${images[@]}"; do
+          image-dr-check --image $image --output ${image-checker-report-path} ${var.image-dr-vm-args};
+
+        done;'''
+    
+    cbo-check:
+    - task: cbo-check
+      condition: conditions:check-if-image-build-required 
+      docker-image: adp-release-auto
+      docker-in-docker: socket
+      cmd: bash -c ''' 
+        set -eux;
+        mkdir -p ${image-checker-report-path};
+        images=(
+          ${var.push-image-name}-gitea:${var.image_version}
+        );
+        for image in "${images[@]}"; do
+          cbo-check --debug --image $image --arm-apikey ${env.ARM_API_TOKEN} --report ${image-checker-report-path};
+        done;''';
+
+
+    image-push-internal:
+    - task: push
+      cmd: ${env.PWD}/cicd/scripts/push_images.sh ${var.image-full-name-internal}-gitea:${var.image_version}
+ 
+    # push largest image first, hoping that most of its layers would be reused by other images
+    image-push:
+    - task: push-public
+      condition: conditions:check-if-image-build-required 
+      cmd: ${env.PWD}/cicd/scripts/push_images.sh  ${var.push-image-name}-gitea:${var.image_version}
+
+    update-files:
+    - task: update-files
+      condition: conditions:check-if-image-build-required 
+      cmd:  ${env.PWD}/cicd/scripts/update-files.sh  ${var.push-image-name}:${var.image_version} .bob/changed-file-list 
+    
+    create-change:
+    - task: create-change
+      condition: conditions:check-if-image-build-required 
+      cmd: ${env.PWD}/cicd/scripts/create-change.sh ${var.push-image-name}-gitea:${var.image_version} .bob/changed-file-list
+
+    delete-images:
+    - task: delete
+      cmd: bash -c '''
+        set -eux -o pipefail;
+        images=(
+          ${var.push-image-name}-gitea:${var.image_version}
+        );
+
+        for image in "${images[@]}"; do
+          docker image remove --force $image || true;
+        done;
+        for image in $(docker images -f "dangling=true" -q); do
+          docker image remove --force $image || true;
+        done;'''
+
+    cleanup-temp-images:
+      - task: delete
+        cmd: bash -c ''' 
+              set -eux -o pipefail;
+              for image in $(docker images -f "dangling=true" -q); do
+                docker image remove --force $image || true;
+              done;'''
+    
+    conditions:
+    - task: check-if-image-build-required
+      cmd:  test "${var.image-build-check}" = "true" 
+
+    
+    

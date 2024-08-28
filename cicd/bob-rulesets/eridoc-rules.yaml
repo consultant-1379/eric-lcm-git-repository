@@ -1,0 +1,49 @@
+modelVersion: 2.0
+
+
+description: "Eridoc Rules"
+
+
+import:
+  images: docker-images.yaml
+
+
+properties:
+  - config_file: EMPTY
+  - individual_number: EMPTY
+  - eridoc-docker-flags: --env ERIDOC_TOKEN="${env.ERIDOC_TOKEN}"
+                         --env ERIDOC_USERNAME="${env.ERIDOC_USERNAME}"
+                         --env ERIDOC_PASSWORD="${env.ERIDOC_PASSWORD}"
+  - eridoc-extra-docker-flags: ""
+  - eridoc-extra-args: ""
+
+
+env:
+  - ERIDOC_TOKEN (default=)
+  - ERIDOC_USERNAME (default=)
+  - ERIDOC_PASSWORD (default=)
+
+
+rules:
+  eridoc-upload:
+    - task: upload
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${eridoc-docker-flags} ${eridoc-extra-docker-flags}
+      cmd: eridoc upload --config ${config_file} --set individual_number="${individual_number}" ${eridoc-extra-args}
+
+
+  eridoc-upload-and-approve:
+    - task: upload-and-approve
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${eridoc-docker-flags}
+      cmd: eridoc upload --config ${config_file} --set individual_number="${individual_number}" --approve ${eridoc-extra-args}
+
+
+  eridoc-approve:
+    - task: approve
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${eridoc-docker-flags}
+      cmd: eridoc approve --config ${config_file} --set individual_number="${individual_number}" ${eridoc-extra-args}

@@ -1,0 +1,57 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+{{ $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+{{- if (.Values.keyValueDatabaseRD.customObject.enabled) }}
+apiVersion: kvdbrd.data.ericsson.com/v1beta1
+kind: KVDBRDCluster
+metadata:
+  name: {{ .Values.keyValueDatabaseRD.customObject.instanceName }}
+  labels:
+    {{- include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: "pre-install"
+    helm.sh/hook-delete-policy: "before-hook-creation"
+    helm.sh/hook-weight: "1"
+spec:
+  instanceVersions:
+    - ""
+  log:
+    level: "debug"
+    streamingMethod: "indirect"
+  increasedReplicationDuringUpgrade: true
+  masterReplicaAntiAffinity: "hard"
+  metrics:
+    enabled: {{ .Values.keyValueDatabaseRD.customObject.metrics.enabled }}
+  networkPolicy:
+    enabled: false
+  resources:
+    flavor: {{ .Values.keyValueDatabaseRD.customObject.resources.flavor }}
+  replicas:
+    masters: {{ .Values.keyValueDatabaseRD.customObject.replicas.masters }}
+    replicationFactor: {{ .Values.keyValueDatabaseRD.customObject.replicas.replicationFactor }}
+  security:
+    acl:
+      enabled: {{ .Values.keyValueDatabaseRD.customObject.security.acl.enabled }}
+      users:
+        - name: {{ include "eric-lcm-git-repository.userName" .}}
+          permissions: {{ include "eric-lcm-git-repository.userPermissions" . }}
+    tls:
+      enforced: "required"
+      verifyClientCertificate: "required"
+  settings:
+    - "maxmemory 1gb"
+    - "maxmemory-policy noeviction"
+  suspend: false
+{{- end -}}

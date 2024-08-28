@@ -1,0 +1,11 @@
+global:
+  redis:
+    acl:
+      enabled: false
+  security:
+    tls:
+      enabled: false
+ingress:
+  createRoutes: false
+  enabled: false
+replicaCount: 1

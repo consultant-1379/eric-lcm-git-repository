@@ -1,0 +1,44 @@
+modelVersion: 2.0
+
+
+description: "Container Rules"
+
+
+import:
+  common: common-rules.yaml
+
+
+properties:
+  - image: ""
+  - image-build-dr-directory: ${common.ci-build-directory}/image
+  - image-artifacts-directory: ${common.ci-artifacts-directory}/image
+  - image-design-rules-skip: ${var.image-dr-skip}
+
+
+var:
+  - image-design-rules-status-code
+  - image-dr-skip
+
+
+rules:
+  image-dr:
+    - task: check-image-not-empty
+      cmd: '[ -n "${image}" ]'
+    - task: create-image-build-dr-dir
+      cmd:
+        - rm -rf ${image-build-dr-directory} || true
+        - mkdir -p ${image-build-dr-directory}
+        - touch .bob/var.image-dr-skip
+    - task: check-image-dr
+      docker-image: images.adp-image-dr-check
+      docker-in-docker: socket
+      cmd: /bin/bash -c '
+              image-dr-check -i ${image} -o "${image-build-dr-directory}" ${image-design-rules-skip} -d true;
+              echo $? > .bob/var.image-design-rules-status-code; '
+    - task: archive-reports
+      cmd:
+        - mkdir -p ${image-artifacts-directory}
+        - mkdir -p ${common.ci-html-reports-directory}/image
+        - cp -f ${image-build-dr-directory}/image-design-rule-check-report.html ${common.ci-html-reports-directory}/image/image_adp_dr_check_report.html;
+        - tar -zcf ${image-artifacts-directory}/image_adp_dr_check_report.tar.gz ${common.ci-html-reports-directory}/image
+        - '[ "${var.image-design-rules-status-code}" == "0" ]'

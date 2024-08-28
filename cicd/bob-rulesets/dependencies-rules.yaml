@@ -1,0 +1,96 @@
+modelVersion: 2.0
+
+
+description: "Common Dependencies Management Rules"
+
+
+import:  
+  common: common-rules.yaml
+
+
+properties:
+  - fossa-report: ""
+
+  - dependencies-docker-flags: ""
+  - dependencies-file: EMPTY
+  - dependency-primary-input-file: EMPTY
+  - dependency-secondary-input-file: EMPTY
+  - dependency-output-file: EMPTY
+
+  - allow-esw4-3pp: "false"
+
+
+env:
+  - SCAS_REFRESH_TOKEN
+
+
+rules:
+  update-fossa:
+    - task: update-fossa
+      description: Converts the FOSSA Report into a YAML file. A scan in scas is performed to fill details about each dependency.
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${dependencies-docker-flags}
+      cmd:
+        - dependencies update
+            --fossa-report ${fossa-report}
+            --dependencies ${dependencies-file}
+            --link-dependencies
+            --sort
+
+
+  update-scas:
+    - task: update-scas
+      description: A scan in Scas is performed to fill details about each dependency from dependencies file.
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${dependencies-docker-flags}
+      cmd:
+        - dependencies update
+            --dependencies ${dependencies-file}
+            --scan-scas
+            --allow-esw4
+            --scas-refresh-token ${env.SCAS_REFRESH_TOKEN}
+            --link-dependencies
+            --debug
+            --sort || true # See: ADPPRG-111511
+
+
+  enrich:
+    - task: enrich
+      description: Enriches a YAML file with information avaliable in a manually filled YAML filled.
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${dependencies-docker-flags}
+      cmd:
+        - dependencies enrich
+          --dependencies ${dependency-primary-input-file}
+          --secondary-dependencies-file ${dependency-secondary-input-file}
+          --output-name ${dependency-output-file}
+          --partial
+          --sort
+
+
+  validate:
+    - task: bypass-esw4
+      description: Validate the final file.
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${dependencies-docker-flags}
+      cmd:
+        - dependencies validate
+          --dependencies ${dependency-primary-input-file}
+          $( [ "${allow-esw4-3pp}" == "true" ] && echo "--allow-esw4" )
+
+
+  merge:
+    - task: merge
+      description: Merge dependencies files
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${dependencies-docker-flags}
+      cmd:
+        - dependencies merge
+          -d ${dependency-primary-input-file}
+          -d ${dependency-secondary-input-file}
+          -o ${dependency-output-file}

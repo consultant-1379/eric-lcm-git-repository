@@ -1,0 +1,25 @@
+bases:
+  - ../defaults.yaml
+
+releases:
+  - name: eric-data-key-value-database-rd-crd
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-data-key-value-database-rd-crd
+    values:
+      - "values.gotmpl"
+    hooks:
+    - events: ['postuninstall']
+      showlogs: true
+      command: "kubectl"
+      args:
+       - "delete"
+       - "crd"
+       - "-l"
+       - "app.kubernetes.io/name=eric-data-key-value-database-rd-crd"
+  - name: eric-data-key-value-database-rd
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-data-key-value-database-rd
+    values:
+      - "values.gotmpl"
+    needs:
+      - eric-data-key-value-database-rd-crd

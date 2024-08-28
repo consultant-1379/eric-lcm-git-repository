@@ -1,0 +1,23 @@
+global:
+  networkPolicy:
+    enabled: {{ env "NETWORK_POLICY_ENABLED" | default false }}
+  pullSecret: {{ requiredEnv "ARM_DOCKER_CREDS" }}
+  multiTenancy:
+      enabled: false
+  meshConfig:
+    enableAutoMtls: {{ env "ENABLE_AUTO_MTLS" | default true }}
+    accessLogFile: /dev/stdout
+    enablePrometheusMerge: false
+    defaultConfig:
+      holdApplicationUntilProxyStarts: true
+autoScaling:
+  enabled: false
+replicaCount: 1
+telemetry:
+  enabled: true
+  v2:
+    enabled: true
+pilot:
+  enableMetadataExchange: true
+  env:
+    ENABLE_TLS_ON_SIDECAR_INGRESS: true

@@ -1,0 +1,9 @@
+{{- $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+eric-lcm-git-repository
+
+{{- include "eric-lcm-git-repository.invalidTimezoneWarning" . }}
+
+1. Get the application URL by running these commands:
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "eric-lcm-git-repository.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward $POD_NAME {{ $global.security.tls.enabled | ternary "443" "8080" }}
+  {{ $global.security.tls.enabled | ternary "https" "http" }}://{{ .Values.ingress.hostname }} to use your application.

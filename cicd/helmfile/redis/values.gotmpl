@@ -1,0 +1,12 @@
+global:
+  security:
+    tls:
+      enabled: {{ env "TLS_ENABLED" | default false }}
+  keyValueDatabaseRD:
+    newOperator:
+      enabled: true
+imageCredentials:
+  pullSecret: {{ requiredEnv "ARM_DOCKER_CREDS" }}
+
+labels:
+   env: ci

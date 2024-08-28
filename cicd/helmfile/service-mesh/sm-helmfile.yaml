@@ -1,0 +1,41 @@
+bases:
+  - ../defaults.yaml
+---
+
+releases:
+  - name: eric-mesh-controller-crd
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-mesh-controller-crd
+    hooks:
+    - events: ['postuninstall']
+      showlogs: true
+      command: "kubectl"
+      args:
+       - "delete"
+       - "crd"
+       - "-l"
+       - "app.kubernetes.io/name=eric-mesh-controller-crd"
+  - name: eric-mesh-controller
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-mesh-controller
+    values:
+      - "eric-mesh-controller-values.gotmpl"
+    set:
+      - name: pilot.jwksResolverExtraRootCA
+        file: {{ requiredEnv "EGADROOTCA_LOCATION" }}
+    needs:
+      - eric-mesh-controller-crd
+  - name: eric-mesh-gateways
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-mesh-gateways
+    values:
+      - "eric-mesh-gateways-values.gotmpl"
+    needs:
+      - eric-mesh-controller
+  - name: eric-lcm-git-repository-sm-resources
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: ../../dependency-resource-charts/service-mesh-resources
+    values:
+      - "values.gotmpl"
+    needs:
+      - eric-mesh-gateways     

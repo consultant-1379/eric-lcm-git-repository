@@ -1,0 +1,17 @@
+
+{{- if .Values.global.security.tls.enabled -}}
+apiVersion: siptls.sec.ericsson.com/v1
+kind: InternalCertificate
+metadata:
+  name: eric-lcm-git-repository-sm-gateway
+spec:
+  kubernetes:
+    generatedSecretName: eric-lcm-git-repository-sm-gateway
+    secretType: tls
+  certificate:
+    subject:
+      cn: eric-lcm-git-repository-sm-gateway
+    extendedKeyUsage:
+      tlsClientAuth: false
+      tlsServerAuth: true
+{{- end -}}

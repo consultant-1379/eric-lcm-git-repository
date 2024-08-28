@@ -1,0 +1,34 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+ 
+productName: "Git Repository Helm Chart"
+productNumber: "CXD 101 968"
+images:
+  eric-lcm-git-repository-gitea:
+    productName: "Git Repository Gitea 3PP Image"
+    productNumber: "CXU 101 2582"
+    registry: "armdocker.rnd.ericsson.se"
+    repoPath: proj-mlops-drop
+    name: "eric-lcm-git-repository-gitea"
+    tag: "1.0.0-4"
+  eric-aiml-initializer:
+    productName: "Eric AI/ML Initializer IMAGE"
+    productNumber: "CXU1012580"
+    registry: "armdocker.rnd.ericsson.se"
+    repoPath: "proj-mlops-drop"
+    name: "eric-aiml-initializer"
+    tag: "1.0.0-12"

@@ -1,0 +1,23 @@
+{{- if (gt ( int .Values.replicaCount ) 1 ) -}}
+{{- if .Capabilities.APIVersions.Has "policy/v1" }}
+apiVersion: policy/v1
+{{- else }}
+apiVersion: policy/v1beta1
+{{- end }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}
+  labels: {{ include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations: {{ include "eric-lcm-git-repository.annotations" . | nindent 4 }}
+spec:
+  {{- if and (not ((.Values).podDisruptionBudget).maxUnavailable) ((.Values).podDisruptionBudget).minAvailable }}
+  minAvailable: {{ include "eric-lcm-git-repository.printStringOrIntegerValue" .Values.podDisruptionBudget.minAvailable }}
+  {{- else if and (not ((.Values).podDisruptionBudget).minAvailable) ((.Values).podDisruptionBudget).maxUnavailable }}
+  maxUnavailable: {{ include "eric-lcm-git-repository.printStringOrIntegerValue" .Values.podDisruptionBudget.maxUnavailable }}
+  {{- else if and ((.Values).podDisruptionBudget).minAvailable ((.Values).podDisruptionBudget).maxUnavailable -}}
+  {{- fail "The values for podDisruptionBudget.maxUnavailable and podDisruptionBudget.minAvailable are mutually exclusive. Set only one of them." }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "eric-lcm-git-repository.name" . | quote }}
+{{- end -}}

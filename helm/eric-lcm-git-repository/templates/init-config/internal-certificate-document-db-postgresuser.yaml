@@ -1,0 +1,30 @@
+{{ $global := fromYaml (include "eric-lcm-git-repository.global" .) }}
+{{- if $global.security.tls.enabled -}}
+{{ if .Values.initConfig.enabled }}
+apiVersion: siptls.sec.ericsson.com/v1
+kind: InternalCertificate
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}-init-su-pg-cert
+  labels:
+    {{- include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations:
+    {{- $commonAnn := include "eric-lcm-git-repository.annotations" . | fromYaml }}
+    {{- $hookAnn := dict -}}
+    {{- $_ := set $hookAnn "helm.sh/hook" "pre-install,pre-upgrade" -}}
+    {{- $_ := set $hookAnn "helm.sh/hook-delete-policy" "before-hook-creation" -}}
+    {{- $_ := set $hookAnn "helm.sh/hook-weight" (.Values.initConfig.hookWeightInitResources | toString) -}}
+    {{- include "eric-lcm-git-repository.mergeAnnotations" (dict "location" (.Template.Name) "sources" (list $commonAnn $hookAnn)) | trim | nindent 4 }}
+spec:
+  kubernetes:
+    generatedSecretName: {{ include "eric-lcm-git-repository.name" . }}-init-su-pg-cert
+    secretType: tls
+  certificate:
+    subject:
+      cn: postgres
+    issuer:
+      reference: {{ .Values.serviceMesh.egress.documentdatabasepg.caIssuer | quote}}
+    extendedKeyUsage:
+      tlsClientAuth: true
+      tlsServerAuth: false
+{{- end }}
+{{- end }}

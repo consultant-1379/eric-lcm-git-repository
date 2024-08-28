@@ -1,0 +1,14 @@
+---
+helmfiles:
+  - path: sip-tls/sip-tls-helmfile.yaml
+  - path: redis/redis-helmfile.yaml
+    values:
+    - {{ toYaml .Values | nindent 6 }}
+  - path: pg/postgres-helmfile.yaml
+    values:
+    - {{ toYaml .Values | nindent 6 }}
+{{- if eq (requiredEnv "SERVICE_MESH_ENABLED") "true" }}
+  - path: service-mesh/sm-helmfile.yaml
+    values:
+    - {{ toYaml .Values | nindent 6 }}
+{{- end }}

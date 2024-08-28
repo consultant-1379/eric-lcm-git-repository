@@ -1,0 +1,45 @@
+bases:
+  - ../defaults.yaml
+
+releases:
+  - name: eric-data-document-database-pg-crd
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-data-document-database-pg-crd
+    hooks:
+      - events: ['postuninstall']
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "delete"
+          - "crd"
+          - "-l"
+          - "app.kubernetes.io/name=eric-data-document-database-pg-crd"
+  - name: eric-data-document-database-pg
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-data-document-database-pg
+    values:
+      - "values.gotmpl"
+    needs:
+      - eric-data-document-database-pg-crd
+    hooks:
+{{- if  eq (requiredEnv "PG_OPERATOR_ENABLED") "false" }}
+      - events: ["presync"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "apply"
+          - "-f"
+          - "./secrets.gotmpl"
+          - "--namespace={{ requiredEnv "K8S_NAMESPACE" }}"
+{{- end }}
+{{- if  eq (requiredEnv "PG_OPERATOR_ENABLED") "false" }}
+      - events: ["postuninstall"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "delete"
+          - "-f"
+          - "./secrets.gotmpl"
+          - "--ignore-not-found=true"
+          - "--namespace={{ requiredEnv "K8S_NAMESPACE" }}"
+{{- end }}

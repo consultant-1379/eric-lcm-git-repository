@@ -1,0 +1,12 @@
+global:
+  networkPolicy:
+    enabled: {{ env "NETWORK_POLICY_ENABLED" | default false }}
+  security:
+    tls:
+      enabled: {{ env "TLS_ENABLED" | default false }}
+  pullSecret: {{ requiredEnv "ARM_DOCKER_CREDS" }}
+  featureGates:
+    caBootstrap_v2: true
+logLevel: debug
+labels:
+   env: ci

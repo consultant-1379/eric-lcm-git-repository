@@ -1,0 +1,121 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+modelVersion: "2.0"
+flavor: "ADP 2.0"
+service:
+    # name of the service:
+    name: "Git Repository"
+    # Design Country (set on the source products)
+    design_countries:
+        - SE
+    # Country of Origin (Set on the derivative products)
+    sw_compilation_country: SE
+    # Release responsible
+    release_responsible: BCSSIJJ
+    # Design responsible
+    design_responsible: BCSSIJJ
+    # The documents is optional if all eridoc document revisions are set
+    documents:
+        # Read documents revisions from this file
+        # Use munin-doc search and pri.py to generate this file.
+        # Use full or relative path to product_structure.yaml
+        import: ../../build/documents.yaml
+    # Details of the APR product structure:
+    top_product:
+        # Note: all derivative_products are automatically added to APR product structure
+        # APR Product Number
+        number: APR 201 0204
+        # Designation
+        designation: Git Repository
+        # Description
+        description: |-
+            Git Repository is a source code management to manage changes to source code over time.
+        # Alias designation, use the Helm Chart name
+        alias:
+            - eric-lcm-git-repository
+        # Included documents and products
+        includes:
+            # PRI
+            - eridoc: 109 21-APR 201 0204-1
+              step_strategy: highest revision letter
+            # User Guide
+            - eridoc: 1/1553-APR 201 0204
+              step_strategy: highest revision letter
+            # Test Specification
+            - eridoc: 1/152 41-APR 201 0204
+              step_strategy: highest revision letter
+            # Test Report
+            - eridoc: 1/152 83-APR 201 0204-1
+              step_strategy: highest revision letter
+            # Risk Assessment doc
+            - eridoc: 1/006 64-APR 201 0204
+              step_strategy: highest revision letter
+            # Secure Coding doc
+            - eridoc: 1/0360-APR 201 0204
+              step_strategy: highest revision letter
+            # Vulnerability Analysis Report
+            - eridoc: 1/1597-APR 201 0204
+              step_strategy: highest revision letter
+    # Details of Source product structures
+    src_products:
+        # Source Code Product
+        - label: "Git Repository Source"
+          # Designation
+          designation: Git Repository Source
+          # Description
+          description: >
+              Git Repository is a source code management to manage changes to source code over time.
+          # The product number
+          number: CAV 101 1411
+    # Details of zero or more derivative product structures, use [] for zero
+    derivative_products:
+        # Label describing the product, must be uniq per list item
+        - label: "Git Repository Helm Chart"
+          # Designation
+          designation: Git Repository Helm Chart
+          # Description
+          description: >
+              The Helm Chart configuration file of Git Repository microservice to deploy on a Kubernetes cluster.
+          # specific CXD product number
+          number: CXD 101 968
+          # Use the helm chart name as alias for the helm chart product
+          alias:
+              - eric-lcm-git-repository
+          derivedFrom:
+              munin: CAV 101 1411
+        - label: "Git Repository Gitea Image"
+          # Designation
+          designation: Git Repository Gitea Image
+          # Description
+          description: >
+              The container image of Git Repository contains all necessary components for source code management.
+          # specific CXU product number
+          number: CXU 101 2582
+          includes:
+              # Common Base OS Image
+              - munin: CXC 201 2032
+                version: ##CBOS_VERSION##
+                secondPartyProduct: "True"
+              # Common Base OS Repository
+              - munin: CXC 201 2031
+                version: ##CBOS_VERSION##
+                secondPartyProduct: "True"
+          # Use the image name as alias for the image product
+          alias:
+              - eric-lcm-git-repository
+          derivedFrom:
+              munin: CAV 101 1411

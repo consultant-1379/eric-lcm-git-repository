@@ -1,0 +1,39 @@
+#
+# COPYRIGHT Ericsson 2023
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+{{ $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+{{- if and (eq .Values.gitea.config.database.DB_TYPE "postgres") (.Values.documentDatabasePG.customObject.enabled) ($global.documentDatabasePG.operator.enabled) }}
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "eric-lcm-git-repository.dataDocumentPG.coBrAgent" . }}
+  annotations:
+    {{- $commonAnn := include "eric-lcm-git-repository.annotations" . | fromYaml }}
+    {{- $hookAnn := dict -}}
+    {{- $_ := set $hookAnn "helm.sh/hook" "pre-install,pre-upgrade" -}}
+    {{- $_ := set $hookAnn "helm.sh/hook-delete-policy" "before-hook-creation" -}}
+    {{- $_ := set $hookAnn "helm.sh/hook-weight" "1" | toString -}}
+    {{- include "eric-lcm-git-repository.mergeAnnotations" (dict "location" (.Template.Name) "sources" (list $commonAnn $hookAnn)) | trim | nindent 4 }}
+  labels: {{- include "eric-lcm-git-repository.labels" . | nindent 4 }}
+data:
+  backupRestoreMetadataConfigs: |
+    logicalDbs:
+    - username: {{ .Values.gitea.config.database.NAME }}
+      database: {{ .Values.gitea.config.database.NAME }}
+      inOutTables: none
+      tablesList:
+{{- end -}}

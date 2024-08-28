@@ -1,0 +1,262 @@
+modelVersion: 2.0
+
+
+description: "Common Rules"
+
+
+# import:
+#   images: docker-images.yaml
+docker-images:
+    - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:${env.RELEASE_AUTO_TAG}
+    - ci-toolkit: armdocker.rnd.ericsson.se/proj-mxe-ci-internal/ci-toolkit:${env.CI_TOOLKIT_TAG}
+
+import:
+    common-properties: ../common-properties.yaml    
+
+properties:
+  - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:latest
+  - submodule-base-directory: ${var.common-submodule-base-directory}
+
+  - dry-run: ${env.DRY_RUN}
+  - debug: ${env.DEBUG}
+
+  - release: ${env.RELEASE}
+
+  - version: ${var.version}
+  - version-prefix: ${var.version-prefix}
+  - version-major: ${var.version-major}
+  - build-number: ${var.build-number}
+  - version-release: ${var.version-release}
+
+  - ci-build-directory: ${env.BUILD_DIR}
+  - ci-artifacts-directory: ${env.ARCHIVE_ARTIFACTS_DIR}
+  - ci-reports-directory: ${env.REPORT_DIR}
+  - ci-html-reports-directory: ${env.HTML_REPORT_DIR}
+
+  - user: ${env.USER}
+  - arm-user: ${env.ARM_USER}
+  - arm-token: ${env.ARM_TOKEN}
+  - arm-token-ki: ${env.ARM_TOKEN_KI}
+
+  - output-directory: ${ci-artifacts-directory}
+  - output-filename: "MANDATORY-OVERRIDE"
+  - input-directory: "MANDATORY-OVERRIDE"
+  - upload-file: "MANDATORY-OVERRIDE"
+  - upload-repository: "MANDATORY-OVERRIDE"
+  - upload-dry-run: "true"
+
+  - git-reference-for-version: HEAD
+
+  - image-dev-repopath: ${common-properties.image-registry-path}-dev
+  - image-ci-repopath: ${common-properties.image-registry-path}-ci-internal
+  - image-drop-repopath: ${common-properties.image-drop-repopath}
+
+    # Helm Chart name must follow the pattern: eric-[a-z0-9]{1,5}-[a-z0-9-]{1,30}
+  - helm-chart-dev-repopath: ${common-properties.helm-chart-repo-server-path}-dev-helm/
+  - helm-chart-ci-repopath: ${common-properties.helm-chart-repo-server-path}-ci-internal-helm  
+
+
+var:
+  - common-submodule-base-directory
+
+  - build-number
+  - version
+  - version-major
+  - version-prefix
+  - version-release
+
+  - commithash-short
+  - commithash
+
+  - rstate
+
+  - image-registry
+  - image-repopath-drop
+
+
+env:
+  - PWD
+  - DRY_RUN (default=false)
+  - DEBUG (default=false)
+  - HOME
+
+  - USER (default=user)
+  - ARM_USER (default=${user})
+  - ARM_TOKEN
+  - ARM_TOKEN_KI
+  - DOCKER_NETWORK (default=--network host)
+
+  - RELEASE (default=false)
+
+  - WORKSPACE (default=${env.PWD})
+  - BUILD_DIR (default=build)
+  - REPORT_DIR (default=build/reports)
+  - ARCHIVE_ARTIFACTS_DIR (default=build/archive-artifacts)
+  - HTML_REPORT_DIR (default=build/reports/html)
+
+  - RELEASE_AUTO_TAG (default=latest)
+  - CI_TOOLKIT_TAG (default=latest)
+  - K8S_NAMESPACE (default=eric-lcm-git-repository-ci)
+  - KUBECTL_VERSION (default=1.25.3)
+  - ENABLE_HELM_V3 (default=true)
+  - HELM_VERSION (default=${common-properties.helm-version})
+
+
+rules:
+  init:
+    - rule: init-base
+    - rule: init-from-version
+
+
+  init-base:
+    - task: create-directories
+      cmd:
+        - mkdir -p ${ci-build-directory}
+        - mkdir -p ${ci-artifacts-directory}
+        - mkdir -p ${ci-reports-directory}
+        - mkdir -p ${ci-html-reports-directory}
+        - mkdir -p .bob
+
+    - task: set-submodule-base-directory
+      cmd:
+        - echo -n "cicd/bob-rulesets" > .bob/var.common-submodule-base-directory
+        - echo -n "${submodule-base-directory}" > .bob/var.common-submodule-base-directory
+
+    - task: get-git-info
+      docker-image: adp-release-auto
+      cmd:
+      - git rev-parse --short ${git-reference-for-version} > .bob/var.commithash-short
+      - git rev-parse ${git-reference-for-version} > .bob/var.commithash
+      - git log -1 --format='%aN' > .bob/var.commit-author
+      - git log -1 --format='%aE' > .bob/var.commit-email
+    
+    - task: get-version
+      docker-image: adp-release-auto
+      cmd:
+        - generate-version --is-release ${env.RELEASE} --output version
+    
+    - task: get-image-version
+      docker-image: adp-release-auto
+      cmd:
+        - generate-version --is-release true --output image_version
+
+    - task: rstate
+      docker-image: adp-release-auto
+      cmd: get_rstate.py ${var.version} > .bob/var.rstate
+
+    - task: revision # For example: PA1
+      cmd: RSTATE=${var.rstate} && echo P${RSTATE:2}1 > .bob/var.revision
+
+    - task: image-repopath-internal
+      cmd: echo "${image-ci-repopath}" | cut -f2- -d '/' > .bob/var.image-repopath-internal
+    
+    - task: image-registry
+      cmd: echo "${image-ci-repopath}" | cut -f1 -d '/' > .bob/var.image-registry
+    
+    - task: image-full-name-internal
+      cmd: echo "${image-ci-repopath}/${common-properties.docker-image-name}" > .bob/var.image-full-name-internal
+
+    - task: image-repopath-drop
+      cmd: echo "${image-drop-repopath}" | cut -f2- -d '/' > .bob/var.image-repopath-drop
+
+    - task: image-full-name
+      cmd: echo "${image-drop-repopath}/${common-properties.docker-image-name}" > .bob/var.image-full-name
+
+    - task: push-image-name
+      cmd: cat .bob/var.image-full-name > .bob/var.push-image-name
+        
+    - task: helm-chart-repo-internal
+      cmd: echo "${helm-chart-ci-repopath}" > .bob/var.helm-chart-repo-internal
+
+    - task: image-build-check
+      cmd: cicd/scripts/checkIfVersionChanged.sh ${env.WORKSPACE} "cicd/common-properties.yaml" 'gitea-version-tag'
+
+
+
+  init-from-version:
+    - task: get-build-number
+      cmd: echo -n "${var.version}" | sed -rn 's/^([0-9]+)\.([0-9]+)\.([0-9]+)-(.*)$/\4/p' > .bob/var.build-number
+
+    - task: get-version-major
+      cmd: echo -n "${var.version}" | awk -F '.' '{print $1}' > .bob/var.version-major
+
+    - task: get-version-prefix
+      cmd: cat VERSION_PREFIX | tr -d '\n' > .bob/var.version-prefix
+
+
+  init-release:
+    - rule: init
+    - task: generate-released-version
+      docker-image: adp-release-auto
+      cmd:
+        - version-handler convert-version
+          -s ${version} -o .bob/var.version-release
+        - cat .bob/var.version-release | cut -d '+' -f 1 > .bob/var.version-prefix
+
+  init-drop:
+
+    - task: adp-artifacts-properties
+      docker-image: adp-release-auto
+      cmd: generate-adp-artifacts
+          --chart-name ${common-properties.helm-chart-name}
+          --chart-version ${var.version}
+          --chart-repo ${common-properties.helm-chart-drop-repopath}
+          --image-name ${common-properties.docker-image-name}
+          --image-version ${var.version}
+          --image-repo "${var.image-registry}/${var.image-repopath-drop}"
+
+    - task: write-git-details
+      cmd:
+          - echo "GIT_TAG=$(git log -1 --pretty=format:'%h')" >> artifact.properties
+          - echo "GIT_COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')" >> artifact.properties
+          - echo "GIT_COMMIT_AUTHOR_EMAIL=$(git log -1 --format='%aE')" >> artifact.properties
+          - echo "GIT_COMMIT_SUMMARY=$(git log -1 --pretty=format:'%s')" >> artifact.properties
+
+    - task: write-release-details
+      cmd:
+          - echo "RELEASE=${env.RELEASE}" >> artifact.properties
+
+  clean:
+    - task: clean-directories
+      cmd: 'rm -rf ${ci-build-directory}/ || :'
+
+    - task: clean-artifactory-directory
+      cmd: 'rm -rf ${ci-artifacts-directory}/ || :'
+
+    - task: clean-reports-directory
+      cmd: 'rm -rf ${ci-reports-directory}/ || :'
+
+    - task: clean-bob-work-directory
+      cmd: 'rm -rf .bob/ || :'
+
+  clean-k8s-cluster:
+    - task: namespace-delete
+      docker-image: ci-toolkit
+      docker-flags: &docker_flags
+          - ${env.DOCKER_NETWORK}
+          - "--env HOME"
+          - "--env PWD"
+          - "--env BOB_DIR"
+          - "--env K8S_NAMESPACE"
+          - "--env KUBECONFIG"
+          - "--env TLS_ENABLED"
+          - "--env STORAGE_CLASS"
+          - "--volume ${env.PWD}:${env.PWD}"
+          - "--volume ${env.HOME}:${env.HOME}"
+      cmd: kubectl delete namespace ${env.K8S_NAMESPACE} --ignore-not-found=true
+
+  upload-file-arm:
+    - task: upload-file
+      docker-image: adp-release-auto
+      cmd:
+        - upload_file.sh --filename=${upload-file}
+                         --repository=${upload-repository}
+                         --api-token=${arm-token}
+                         --dry-run=${upload-dry-run}
+                         --overwrite=true
+
+  conditions:
+    - task: is-debug
+      cmd: '[ "${debug}" == "true" ]'
+    - task: is-dry-run
+      cmd: '[ "${dry-run}" == "true" ]'

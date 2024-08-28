@@ -1,0 +1,16 @@
+{{- $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+{{- if $global.security.policyBinding.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}-security-policy
+  labels: {{ include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations: {{ include "eric-lcm-git-repository.annotations" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "eric-lcm-git-repository.securityPolicy.reference" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "eric-lcm-git-repository.serviceAccountName" . }}
+{{- end -}}

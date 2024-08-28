@@ -1,0 +1,5 @@
+{{/*
+Defines Unknown peers network policy.
+kind: NetworkPolicy
+*/}}
+{{- include "eric-lcm-git-repository.networkPolicyIngressDefaultAccess" . -}}

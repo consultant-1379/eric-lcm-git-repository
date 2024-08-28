@@ -1,0 +1,13 @@
+# Based on https://eteamspace.internal.ericsson.com/display/ACD/NMAP+Scanning
+nmapConfig:
+  services:
+    - name: "eric-lcm-git-repository"
+      protocol:
+        - "tcp"
+      additionalParams:
+        - "-v"
+        - "-p 0-65535"
+        - "--stats-every 15"
+      selector:
+        - "eric-lcm-git-repository"
+  privilegedMode: true

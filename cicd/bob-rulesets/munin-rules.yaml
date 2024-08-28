@@ -1,0 +1,113 @@
+modelVersion: 2.0
+
+
+description: "Munin Rules"
+
+
+import:
+  common: common-rules.yaml
+
+
+properties:
+  - dependencies-file-path: EMPTY
+  - product-structure-path: EMPTY
+  - output-documents-file: EMPTY
+  - output-search-foss-folder: EMPTY
+  - munin-token: ${env.MUNIN_TOKEN}
+  - munin-server: ${env.MUNIN_SERVER}
+  - eridoc-docker-flags:
+      --env ERIDOC_USERNAME=${env.eridoc.ERIDOC_USERNAME}
+      --env ERIDOC_PASSWORD='${env.eridoc.ERIDOC_PASSWORD}'
+  - munin-extra-args: ""
+
+
+env:
+  - MUNIN_TOKEN (default=)
+  - MUNIN_SANDBOX_TOKEN (default=)
+  - MUNIN_SERVER (default=prod)
+
+
+rules:
+  validate:
+    - task: validate
+      description: Run a Munin Validation on product structure
+      docker-image: images.adp-release-auto
+      cmd: munin validate
+            --product-structure ${product-structure-path}
+            ${munin-extra-args}
+
+
+  doc-search:
+    - task: doc-search-assert
+      description: Check if all documents are avaliable
+      docker-image: images.adp-release-auto
+      docker-flags:
+        - ${eridoc-docker-flags}
+      cmd: munin-doc search
+            --product-structure ${product-structure-path}
+            --documents ${output-documents-file}
+            ${munin-extra-args}
+
+
+  create-versions:
+    - task: create-versions
+      description: Creates a version in munin
+      docker-image: images.adp-release-auto
+      cmd: munin create-versions
+            --refresh-token ${munin-token}
+            --product-structure ${product-structure-path}
+            --server ${munin-server}
+            --version ${var.common.version-prefix}
+            ${munin-extra-args}
+            --debug
+
+
+  release:
+    - task: release-versions
+      description: Release a version in munin
+      docker-image: images.adp-release-auto
+      cmd: munin release-versions
+            --only-update-lifecycle-state
+            --refresh-token ${munin-token}
+            --product-structure ${product-structure-path}
+            --server ${munin-server}
+            --version ${var.common.version-prefix}
+            ${munin-extra-args}
+            --debug
+
+
+  delete:
+    - task: delete-versions
+      description: Delete a version in munin
+      docker-image: images.adp-release-auto
+      cmd: munin delete-versions
+            --refresh-token ${munin-token}
+            --product-structure ${product-structure-path}
+            --server ${munin-server}
+            --version ${var.common.version-prefix}
+            ${munin-extra-args}
+            --debug
+
+
+  search-foss:
+    - task: search-foss
+      description: Checks if all 3PP in a dependencies file are available in Munin.
+      docker-image: images.adp-release-auto
+      cmd: munin search-foss
+            --refresh-token ${munin-token}
+            --dependencies ${dependencies-file-path}
+            --output ${output-search-foss-folder}
+            --server ${munin-server}
+            --keep-going
+
+
+  # JUST FOR SANDBOX ENVIRONMENT
+  create-products:
+    - task: create-products
+      description: Create products at sandbox environment (for production env, products should be created manually)
+      docker-image: images.adp-release-auto
+      cmd: munin create-products
+            --refresh-token ${env.MUNIN_SANDBOX_TOKEN}
+            --product-structure ${product-structure-path}
+            ${munin-extra-args}
+            --server sandbox

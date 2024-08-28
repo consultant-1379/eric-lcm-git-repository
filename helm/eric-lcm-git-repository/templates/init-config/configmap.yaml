@@ -1,0 +1,43 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+{{ $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+{{- if .Values.initConfig.enabled }}
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}-initializer-cm
+  annotations:
+    {{- $commonAnn := include "eric-lcm-git-repository.annotations" . | fromYaml }}
+    {{- $hookAnn := dict -}}
+    {{- $_ := set $hookAnn "helm.sh/hook" "pre-install,pre-upgrade" -}}
+    {{- $_ := set $hookAnn "helm.sh/hook-delete-policy" "before-hook-creation" -}}
+    {{- $_ := set $hookAnn "helm.sh/hook-weight" "2" -}}
+    {{- include "eric-lcm-git-repository.mergeAnnotations" (dict "location" (.Template.Name) "sources" (list $commonAnn $hookAnn)) | trim | nindent 4 }}
+  labels: {{- include "eric-lcm-git-repository.labels" . | nindent 4 }}
+data:
+  config.properties: |
+    pgInit.enabled: true
+    pgInit.hostName: {{ .Values.documentDatabasePG.customObject.instanceName }}
+    pgInit.port: {{ .Values.documentDatabasePG.customObject.portNumber }}
+    pgInit.tls.enabled: {{ $global.security.tls.enabled }}
+    pgInit.tls.cert: /run/secrets/pg/tls.crt
+    pgInit.tls.key: /run/secrets/pg/tls.key
+    pgInit.tls.ca: /run/secrets/root/ca.crt
+    pgInit.service.dbCreate: true
+    pgInit.service.dbName: {{ .Values.gitea.config.database.NAME }}
+    pgInit.service.userCreate: true
+{{- end -}}

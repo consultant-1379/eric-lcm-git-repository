@@ -1,0 +1,58 @@
+modelVersion: 2.0
+
+
+description: "Ericsson Vulnerability Management Service Rules"
+
+
+import:
+    common: common-rules.yaml
+    common-properties: ../common-properties.yaml
+
+
+properties:
+    - product-structure-path: ""
+    - evms-product-name: ""
+    - evms-product-version: ""
+
+    - evms-server : ${env.EVMS_SERVER}
+    - evms-checker-html-dir: ${common.ci-html-reports-directory}/evms
+    - evms-archive-dir: ${common.ci-artifacts-directory}/evms
+    - enable-auto-answering: "false"
+    - evms-extra-args: ""
+    - evms-docker-flags: ""
+
+    - evms-api-key: ${env.EVMS_API_KEY}
+
+
+env:
+    - EVMS_API_KEY(default=)
+    - EVMS_SERVER(default="https://evms.internal.ericsson.com/")
+    - DRY_RUN (default=false)
+    - EVMS_USERNAME ( default="mxecifunc")
+
+rules:
+    evms-pre-registration:
+        - task: evms-pre-registration
+          condition: check_dependencies:check-has-changed
+          docker-image: adp-release-auto
+          docker-envs:
+              - EVMS_API_KEY
+          cmd: dependencies pre-register
+              --evms
+              --evms-user=${env.EVMS_USERNAME}
+              --evms-product-name '${common-properties.service-name}'
+              --evms-product-version ${var.semver}
+              --dry-run false
+              --debug
+              --enable-auto-answering
+    check_dependencies:
+        - task: check-has-changed
+          cmd:
+              - if [ -z "$(git diff --name-status HEAD~ | grep 'fossa\|plms')" ]; then
+                echo "NO modifications have been made dependencies.";
+                echo false > .bob/var.has-dependencies-been-modified;
+                else
+                echo "There has been modifications made to the dependencies.";
+                echo true > .bob/var.has-dependencies-been-modified;
+                fi
+              - test ${var.has-dependencies-been-modified} == true

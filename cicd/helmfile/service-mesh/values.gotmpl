@@ -1,0 +1,6 @@
+global:
+  networkPolicy:
+    enabled: {{ env "NETWORK_POLICY_ENABLED" | default false }}
+  security:
+    tls:
+      enabled: {{ env "TLS_ENABLED" | default false }}

@@ -1,0 +1,34 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+#  Note : These are the file that will be uploaded to JFrog. Please list if any other files need to be upload.
+#  document name
+documents:
+    - name: "Application Developers Guide"
+      filepath: build/markdown/Application_Developers_Guide.zip
+    - name: "Service User Guide"
+      filepath: build/markdown/User_Guide.zip
+      default: true
+    - name: "Inner Source README"
+      filepath: build/markdown/Inner_Source_README.zip
+    - name: "Contributing Guideline"
+      filepath: build/markdown/Contributing_Guideline.zip
+    - name: "Characteristics Summary Report"
+      filepath: build/markdown/Characteristics_Report.zip
+    - name: "PM Metrics"
+      filepath: config/fragments/pm-metrics.json
+    - name: "Characteristics Summary Report JSON"
+      filepath: config/fragments/characteristics-report.json

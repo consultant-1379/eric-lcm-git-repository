@@ -1,0 +1,21 @@
+{{- if .Values.ingress.enabled -}}
+{{- $global := fromYaml ( include "eric-lcm-git-repository.global" . ) -}}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}
+  labels: {{ include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations: {{- include "eric-lcm-git-repository.iccrHttpProxyAnnotations" . | nindent 4 }}
+spec:
+  {{- if .Values.ingress.ingressClass }}
+  ingressClassName: {{ .Values.ingress.ingressClass }}
+  {{- end }}
+  virtualhost:
+    fqdn: {{ required "A valid hostname address is required for ingress.hostname" .Values.ingress.hostname | quote }}
+        {{- if .Values.ingress.tls.enabled }}
+    tls:
+      secretName: {{ .Values.ingress.tls.secretName }}
+    {{- end }}
+  includes:
+    - name: {{ include "eric-lcm-git-repository.name" . }}-routes
+{{- end -}}

@@ -1,0 +1,17 @@
+{{- $global := fromYaml ( include "eric-lcm-git-repository.global" . ) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eric-lcm-git-repository.name" . }}
+  labels: {{ include "eric-lcm-git-repository.labels" . | nindent 4 }}
+  annotations: {{ include "eric-lcm-git-repository.serviceAnnotations" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.http.port }}
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "eric-lcm-git-repository.name" . | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}

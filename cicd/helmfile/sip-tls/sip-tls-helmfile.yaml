@@ -1,0 +1,58 @@
+bases:
+  - ../defaults.yaml
+
+releases:
+  - name: eric-sec-sip-tls-crd
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-sec-sip-tls-crd
+    hooks:
+    - events: ['postuninstall']
+      showlogs: true
+      command: "kubectl"
+      args:
+       - "delete"
+       - "crd"
+       - "-l"
+       - "app.kubernetes.io/name=eric-sec-sip-tls-crd"
+
+  - name: eric-data-distributed-coordinator-ed
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-data-distributed-coordinator-ed
+    values:
+      - "values.gotmpl"
+      - pods:
+          dced:
+            replicaCount: 1
+        affinity:
+          podAntiAffinity: soft
+        persistence:
+            persistentVolumeClaim:
+              storageClassName: {{ requiredEnv "STORAGE_CLASS" }}
+    needs:
+      - eric-sec-sip-tls-crd
+
+  - name: eric-sec-key-management
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-sec-key-management
+    values:
+      - "values.gotmpl"
+    needs:
+      - eric-sec-sip-tls-crd
+      
+  - name: eric-sec-sip-tls
+    namespace: {{ requiredEnv "K8S_NAMESPACE" }}
+    chart: adp-gs-all-helm/eric-sec-sip-tls
+    values:
+      - "values.gotmpl"
+    needs:
+      - eric-sec-sip-tls-crd
+    hooks:
+      - events: ['postuninstall']
+        showlogs: true
+        command: "kubectl"
+        args:
+        - "delete"
+        - "configmap"
+        - "eric-sec-sip-tls-ha"
+        - "eric-sec-sip-tls-supervisor-ha"
+        - "--ignore-not-found=true"

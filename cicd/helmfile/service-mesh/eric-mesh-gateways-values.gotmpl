@@ -1,0 +1,18 @@
+global:
+  networkPolicy:
+    enabled: {{ env "NETWORK_POLICY_ENABLED" | default false }}
+  pullSecret: {{ requiredEnv "ARM_DOCKER_CREDS" }}
+nameOverride: eric-lcm-git-repository-sm-gateway
+autoScaling:
+  enabled: false
+replicaCount: 1
+service:
+  type: ClusterIP
+podAnnotations:
+  proxy.istio.io/config: |-
+    proxyStatsMatcher:
+      inclusionPrefixes:
+        - "cluster"
+        - "http"
+        - "upstream"
+        - "downstream"
